@@ -94,3 +94,38 @@ jobs:
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ env.NPM_VERSION }}-${{ hashFiles('package-lock.json') }}
+
+  deploy-cloudflare-pages:
+    name: Deploy Cloudflare Pages
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Pin npm
+        run: npm install --global npm@${{ env.NPM_VERSION }} && npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Pages artifact
+        run: npm run build
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name music --branch main --commit-hash ${{ github.sha }} --commit-dirty=false

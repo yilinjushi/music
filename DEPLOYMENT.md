@@ -27,6 +27,20 @@ account fixture is present.
 - Build output directory: `dist`
 - Node version: Node.js `22.19.0`, matching CI
 - Functions directory: `functions/` (discovered by Cloudflare Pages)
+- Pages project name: `music`
+- Wrangler config: `wrangler.jsonc`
+
+GitHub Actions deploys `main` to Cloudflare Pages after the CI quality gate
+passes. Configure these repository secrets before enabling that workflow:
+
+- `CLOUDFLARE_API_TOKEN`: API token that can deploy Cloudflare Pages for this
+  account;
+- `CLOUDFLARE_ACCOUNT_ID`: Cloudflare account ID that owns the `music` Pages
+  project.
+
+This repository does not contain a Vercel workflow. If pushes still trigger
+Vercel builds, disable the GitHub integration for the old Vercel project in
+Vercel's dashboard; it is external to this repository's Actions.
 
 Create separate preview and production KV namespaces. Bind them as:
 
