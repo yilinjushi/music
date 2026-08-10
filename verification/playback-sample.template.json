@@ -1,0 +1,14 @@
+{
+  "frozenAt": "YYYY-MM-DDTHH:mm:ssZ",
+  "legalScope": "Tracks accessible to the tester without bypassing payment, region or copyright controls",
+  "samples": [
+    {
+      "id": "replace-with-stable-sample-id",
+      "title": "Expected title",
+      "artists": ["Expected artist"],
+      "album": "Optional expected album",
+      "durationMs": 180000,
+      "legalBasis": "account-accessible"
+    }
+  ]
+}

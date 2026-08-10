@@ -1,0 +1,43 @@
+{
+  "fixtureSha256": "replace-with-64-character-sha256-of-exact-fixture-bytes",
+  "environment": {
+    "httpsUrl": "https://replace-with-real-preview-host.example.com",
+    "testedAt": "2026-08-09T18:00:00Z",
+    "androidChrome": "Chrome/140.0.7339.123; Android 15; Google Pixel 8",
+    "accountHash": "replace-with-at-least-16-hex-characters"
+  },
+  "samples": [
+    {
+      "id": "replace-with-stable-sample-id",
+      "status": "playable",
+      "resolvedSource": "netease",
+      "actualTitle": "Observed title",
+      "actualArtists": ["Observed artist"],
+      "actualAlbum": "Observed album",
+      "actualDurationMs": 180000,
+      "identityMatch": true,
+      "observedPlaybackSeconds": 15,
+      "sourceAttempts": [
+        {
+          "source": "netease",
+          "outcome": "playable",
+          "observedAt": "2026-08-09T18:00:00Z"
+        }
+      ],
+      "notes": "No credential, account identifier or copyrighted media is recorded"
+    },
+    {
+      "id": "replace-with-an-unplayable-sample-id",
+      "status": "unplayable",
+      "observedPlaybackSeconds": 0,
+      "sourceAttempts": [
+        {
+          "source": "netease",
+          "outcome": "unavailable",
+          "observedAt": "2026-08-09T18:00:00Z"
+        }
+      ],
+      "notes": "Do not invent actual metadata or resolvedSource for an unplayable result"
+    }
+  ]
+}

@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 22.19.0
+  NPM_VERSION: 11.9.0
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  check:
+    name: Quality, mobile browser and evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Restore npm cache
+        id: npm-cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ env.NPM_VERSION }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-${{ env.NPM_VERSION }}-
+
+      - name: Pin npm
+        run: npm install --global npm@${{ env.NPM_VERSION }} && npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for mobile checks
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Locate pinned Chromium
+        id: chromium
+        shell: bash
+        run: echo "path=$(node -e \"process.stdout.write(require('@playwright/test').chromium.executablePath())\")" >> "$GITHUB_OUTPUT"
+
+      - name: Quality gate
+        run: npm run ci-test
+
+      - name: Mobile Chrome E2E and axe
+        env:
+          PLAYWRIGHT_EVIDENCE: "1"
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ steps.chromium.outputs.path }}
+        run: npm run test:e2e
+
+      - name: Verify Playwright execution evidence
+        run: npm run verify:playwright-evidence
+
+      - name: Lighthouse mobile budgets
+        env:
+          CHROME_PATH: ${{ steps.chromium.outputs.path }}
+        run: npm run lighthouse
+
+      # Last artifact-writing command: it binds the already sealed local summary
+      # and every browser result. Upload/cache steps below are read-only here.
+      - name: Final evidence manifest (last writer)
+        if: always()
+        run: npm run evidence:manifest
+
+      - name: Enforce automated evidence eligibility (read-only)
+        if: always()
+        run: node -e "const m=require('./artifacts/evidence-manifest.json');if(m.candidate?.automatedReleaseCandidateEligible!==true){console.error(JSON.stringify(m.candidate?.blockers??[],null,2));process.exit(1)}"
+
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-evidence-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Only main branch updates cache; PR and other refs are restore-only.
+      - name: Save npm cache
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.npm-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ env.NPM_VERSION }}-${{ hashFiles('package-lock.json') }}

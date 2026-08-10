@@ -1,0 +1,45 @@
+/**
+ * Functions logs intentionally accept only predeclared event identifiers.
+ * Request data, URLs, upstream responses, and Error objects have no parameter
+ * slot and therefore cannot accidentally cross the logging boundary.
+ */
+export const FUNCTION_LOG_EVENTS = {
+  BILIBILI_AUDIO_PROXY_FAILED: "BILIBILI_AUDIO_PROXY_FAILED",
+  BILIBILI_COLLECTION_DETAIL_FAILED: "BILIBILI_COLLECTION_DETAIL_FAILED",
+  BILIBILI_COLLECTION_SEARCH_FAILED: "BILIBILI_COLLECTION_SEARCH_FAILED",
+  BILIBILI_COVER_PROXY_FAILED: "BILIBILI_COVER_PROXY_FAILED",
+  BILIBILI_SEARCH_FAILED: "BILIBILI_SEARCH_FAILED",
+  BILIBILI_SONG_URL_FAILED: "BILIBILI_SONG_URL_FAILED",
+  KUGOU_API_FAILED: "KUGOU_API_FAILED",
+  KUGOU_SHORT_URL_FAILED: "KUGOU_SHORT_URL_FAILED",
+  KUWO_API_FAILED: "KUWO_API_FAILED",
+  MIGU_API_FAILED: "MIGU_API_FAILED",
+  MIGU_SEARCH_FAILED: "MIGU_SEARCH_FAILED",
+  MIGU_SHORT_URL_FAILED: "MIGU_SHORT_URL_FAILED",
+  MIGU_SONG_URL_FAILED: "MIGU_SONG_URL_FAILED",
+  MUSIC_UPSTREAM_FAILED: "MUSIC_UPSTREAM_FAILED",
+  NETEASE_LEGACY_HANDLER_FAILED: "NETEASE_LEGACY_HANDLER_FAILED",
+  PROXY_POLICY_REJECTED: "PROXY_POLICY_REJECTED",
+  PROXY_UPSTREAM_FAILED: "PROXY_UPSTREAM_FAILED",
+  QQMUSIC_API_FAILED: "QQMUSIC_API_FAILED",
+  QQMUSIC_PROXY_FAILED: "QQMUSIC_PROXY_FAILED",
+  UNHANDLED_FUNCTION_ERROR: "UNHANDLED_FUNCTION_ERROR",
+} as const;
+
+export type FunctionLogEvent =
+  (typeof FUNCTION_LOG_EVENTS)[keyof typeof FUNCTION_LOG_EVENTS];
+
+const APPROVED_EVENTS = new Set<string>(Object.values(FUNCTION_LOG_EVENTS));
+const UNKNOWN_EVENT = "UNAPPROVED_FUNCTION_EVENT";
+
+function safeEvent(event: FunctionLogEvent): string {
+  return APPROVED_EVENTS.has(event) ? event : UNKNOWN_EVENT;
+}
+
+export function logFunctionError(event: FunctionLogEvent): void {
+  console.error(`[functions] ${safeEvent(event)}`);
+}
+
+export function logFunctionWarning(event: FunctionLogEvent): void {
+  console.warn(`[functions] ${safeEvent(event)}`);
+}
