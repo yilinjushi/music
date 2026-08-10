@@ -53,7 +53,7 @@ jobs:
         id: chromium
         shell: bash
         run: |
-          echo "path=$(node -e 'process.stdout.write(require(\"@playwright/test\").chromium.executablePath())')" >> "$GITHUB_OUTPUT"
+          node -e 'const { chromium } = require("@playwright/test"); console.log(`path=${chromium.executablePath()}`)' >> "$GITHUB_OUTPUT"
 
       - name: Quality gate
         run: npm run ci-test
