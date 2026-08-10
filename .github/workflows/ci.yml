@@ -52,7 +52,8 @@ jobs:
       - name: Locate pinned Chromium
         id: chromium
         shell: bash
-        run: echo "path=$(node -e \"process.stdout.write(require('@playwright/test').chromium.executablePath())\")" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "path=$(node -e 'process.stdout.write(require(\"@playwright/test\").chromium.executablePath())')" >> "$GITHUB_OUTPUT"
 
       - name: Quality gate
         run: npm run ci-test
