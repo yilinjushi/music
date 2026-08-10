@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   renameSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -16,6 +18,7 @@ import {
   EVIDENCE_PIPELINE_TOKEN_ENV,
   acquireEvidencePipelineLock,
   acquireExclusiveRunLock,
+  evidencePipelineLockPath,
 } from "./exclusive-run-lock.mjs";
 import { projectRoot } from "./evidence-utils.mjs";
 
@@ -47,6 +50,62 @@ test("exclusive run locks recover an invalid stale owner", () => {
     const release = acquireExclusiveRunLock(lock, "Lighthouse evidence");
     const owner = JSON.parse(readFileSync(join(lock, "owner.json"), "utf8"));
     assert.equal(owner.pid, process.pid);
+    release();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a dead owner remains live while its recorded child is alive", () => {
+  const root = mkdtempSync(join(tmpdir(), "exclusive-run-lock-child-live-"));
+  const lock = join(root, "pipeline.lock");
+  try {
+    mkdirSync(lock);
+    writeFileSync(
+      join(lock, "owner.json"),
+      `${JSON.stringify({
+        pid: 999_999_999,
+        token: "parent-token",
+        activeChildren: [
+          { pid: process.pid, nonce: "live-child", startedAt: "fixture" },
+        ],
+      })}\n`
+    );
+    assert.throws(
+      () => acquireExclusiveRunLock(lock, "child-protected writer"),
+      /already running/
+    );
+
+    writeFileSync(
+      join(lock, "owner.json"),
+      `${JSON.stringify({
+        pid: 999_999_999,
+        token: "parent-token",
+        activeChildren: [
+          { pid: 999_999_998, nonce: "dead-child", startedAt: "fixture" },
+        ],
+      })}\n`
+    );
+    const release = acquireExclusiveRunLock(lock, "post-child writer");
+    release();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("active child cleanup is nonce-bound", () => {
+  const root = mkdtempSync(join(tmpdir(), "exclusive-run-lock-child-nonce-"));
+  const lock = join(root, "pipeline.lock");
+  try {
+    const release = acquireExclusiveRunLock(lock, "nonce owner");
+    const child = release.trackActiveChild(process.pid);
+    assert.equal(
+      release.untrackActiveChild({ ...child, nonce: "different-run" }),
+      false
+    );
+    const owner = JSON.parse(readFileSync(join(lock, "owner.json"), "utf8"));
+    assert.deepEqual(owner.activeChildren, [child]);
+    assert.equal(release.untrackActiveChild(child), true);
     release();
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -131,6 +190,99 @@ test("two stale-lock recovery contenders never both acquire", async () => {
   }
 });
 
+test("a controlled stale-owner ABA cannot replace or delete a live owner", () => {
+  const root = mkdtempSync(join(tmpdir(), "exclusive-run-lock-aba-"));
+  const lock = join(root, "pipeline.lock");
+  try {
+    mkdirSync(lock);
+    writeFileSync(
+      join(lock, "owner.json"),
+      '{"pid":0,"token":"stale-owner"}\n'
+    );
+    assert.throws(
+      () =>
+        acquireExclusiveRunLock(lock, "ABA fixture", {
+          recoveryHooks: {
+            afterMarkerAcquired() {
+              const replacement = join(lock, "replacement-owner.json");
+              writeFileSync(
+                replacement,
+                `${JSON.stringify({
+                  pid: process.pid,
+                  token: "replacement-owner",
+                  startedAt: "controlled-interleaving",
+                })}\n`
+              );
+              renameSync(replacement, join(lock, "owner.json"));
+            },
+          },
+        }),
+      /already running/
+    );
+    const owner = JSON.parse(readFileSync(join(lock, "owner.json"), "utf8"));
+    assert.equal(owner.token, "replacement-owner");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("PID reuse recovery requires a verifiable process identity", () => {
+  const root = mkdtempSync(join(tmpdir(), "exclusive-run-lock-pid-reuse-"));
+  const lock = join(root, "pipeline.lock");
+  try {
+    const releaseProbe = acquireExclusiveRunLock(lock, "identity probe");
+    const observedIdentity = JSON.parse(
+      readFileSync(join(lock, "owner.json"), "utf8")
+    ).processIdentity;
+    releaseProbe();
+
+    mkdirSync(lock);
+    writeFileSync(
+      join(lock, "owner.json"),
+      `${JSON.stringify({
+        pid: process.pid,
+        processIdentity: {
+          platform: "linux",
+          bootId: "different-boot",
+          startTimeTicks: "0",
+        },
+        token: "reused-pid",
+      })}\n`
+    );
+    const identityIsVerifiable =
+      process.platform === "linux" &&
+      typeof observedIdentity?.bootId === "string" &&
+      typeof observedIdentity?.startTimeTicks === "string";
+    if (identityIsVerifiable) {
+      const release = acquireExclusiveRunLock(lock, "PID reuse fixture");
+      release();
+    } else {
+      assert.throws(
+        () => acquireExclusiveRunLock(lock, "unverifiable PID fixture"),
+        /already running/
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("pipeline lock paths canonicalize symlink aliases with realpath", () => {
+  const parent = mkdtempSync(join(tmpdir(), "exclusive-run-lock-realpath-"));
+  const root = join(parent, "checkout");
+  const alias = join(parent, "checkout-alias");
+  try {
+    mkdirSync(root);
+    symlinkSync(root, alias, "dir");
+    assert.equal(
+      evidencePipelineLockPath(root),
+      evidencePipelineLockPath(alias)
+    );
+  } finally {
+    rmSync(parent, { recursive: true, force: true });
+  }
+});
+
 test("pipeline reentry is explicit and never leaks through the parent environment", async () => {
   const root = mkdtempSync(join(tmpdir(), "evidence-pipeline-reentry-"));
   const worker = join(root, "worker.mjs");
@@ -172,6 +324,115 @@ test("pipeline reentry is explicit and never leaks through the parent environmen
   }
 });
 
+test("a reentrant writer self-leases across parent SIGKILL", async () => {
+  const root = mkdtempSync(join(tmpdir(), "pipeline-reentrant-sigkill-"));
+  const coordinator = join(root, "coordinator.mjs");
+  const writer = join(root, "writer.mjs");
+  const ready = join(root, "ready.txt");
+  const releaseWriter = join(root, "release.txt");
+  const completed = join(root, "completed.txt");
+  const lockModule = new URL("./exclusive-run-lock.mjs", import.meta.url).href;
+  let coordinatorProcess = null;
+  let writerPid = null;
+
+  const waitForFile = (path) => {
+    const deadline = Date.now() + 5_000;
+    return new Promise((resolveWait, rejectWait) => {
+      const poll = () => {
+        if (existsSync(path)) {
+          resolveWait();
+          return;
+        }
+        if (Date.now() >= deadline) {
+          rejectWait(new Error(`timed out waiting for ${path}`));
+          return;
+        }
+        setTimeout(poll, 20);
+      };
+      poll();
+    });
+  };
+
+  try {
+    writeFileSync(
+      writer,
+      `import { existsSync, writeFileSync } from "node:fs";\n` +
+        `import { acquireEvidencePipelineLock } from ${JSON.stringify(lockModule)};\n` +
+        `const release = acquireEvidencePipelineLock(${JSON.stringify(root)}, "nested fixture", { allowInheritedToken: true });\n` +
+        `process.on("exit", release);\n` +
+        `writeFileSync(${JSON.stringify(ready)}, String(process.pid));\n` +
+        `while (!existsSync(${JSON.stringify(releaseWriter)})) await new Promise((resolve) => setTimeout(resolve, 20));\n` +
+        `release();\n` +
+        `writeFileSync(${JSON.stringify(completed)}, "done");\n`
+    );
+    writeFileSync(
+      coordinator,
+      `import { spawn } from "node:child_process";\n` +
+        `import { acquireEvidencePipelineLock, EVIDENCE_PIPELINE_TOKEN_ENV } from ${JSON.stringify(lockModule)};\n` +
+        `const release = acquireEvidencePipelineLock(${JSON.stringify(root)}, "parent fixture");\n` +
+        `spawn(process.execPath, [${JSON.stringify(writer)}], { env: { ...process.env, [EVIDENCE_PIPELINE_TOKEN_ENV]: release.token }, stdio: "inherit" });\n` +
+        `setInterval(() => {}, 1_000);\n`
+    );
+    coordinatorProcess = spawn(process.execPath, [coordinator], {
+      stdio: "inherit",
+    });
+    const coordinatorClosed = new Promise((resolveClose) => {
+      coordinatorProcess.on("close", (code, signal) =>
+        resolveClose({ code, signal })
+      );
+    });
+    await waitForFile(ready);
+    writerPid = Number(readFileSync(ready, "utf8"));
+    coordinatorProcess.kill("SIGKILL");
+    assert.deepEqual(await coordinatorClosed, {
+      code: null,
+      signal: "SIGKILL",
+    });
+
+    assert.throws(
+      () => acquireEvidencePipelineLock(root, "nested competitor"),
+      /already running/
+    );
+    const owner = JSON.parse(
+      readFileSync(join(evidencePipelineLockPath(root), "owner.json"), "utf8")
+    );
+    assert.ok(
+      owner.activeChildren.some((child) => child.pid === writerPid),
+      "the inherited writer must automatically register a self lease"
+    );
+
+    writeFileSync(releaseWriter, "release\n");
+    await waitForFile(completed);
+    let release;
+    const deadline = Date.now() + 5_000;
+    while (!release && Date.now() < deadline) {
+      try {
+        release = acquireEvidencePipelineLock(root, "post-nested writer");
+      } catch (error) {
+        if (!/already running/.test(String(error))) throw error;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 20));
+      }
+    }
+    assert.equal(typeof release, "function");
+    release();
+  } finally {
+    if (
+      coordinatorProcess?.exitCode === null &&
+      coordinatorProcess?.signalCode === null
+    ) {
+      coordinatorProcess.kill("SIGKILL");
+    }
+    if (writerPid) {
+      try {
+        process.kill(writerPid, "SIGKILL");
+      } catch {
+        // The fixture writer normally exits after removing its self lease.
+      }
+    }
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("every standalone evidence writer participates in the pipeline lock", () => {
   const writers = [
     "scripts/ci-test.js",
@@ -194,4 +455,18 @@ test("every standalone evidence writer participates in the pipeline lock", () =>
       file
     );
   }
+});
+
+test("canonical CI passes its token to the reentrant final manifest", () => {
+  const ci = readFileSync(join(projectRoot, "scripts/ci-test.js"), "utf8");
+  const manifest = readFileSync(
+    join(projectRoot, "scripts/generate-evidence-manifest.mjs"),
+    "utf8"
+  );
+  assert.match(ci, /npm run evidence:manifest/);
+  assert.match(
+    ci,
+    /\[EVIDENCE_PIPELINE_TOKEN_ENV\]:\s*releasePipelineLock\.token/
+  );
+  assert.match(manifest, /Evidence manifest[\s\S]*allowInheritedToken:\s*true/);
 });

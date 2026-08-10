@@ -427,7 +427,8 @@ export function verifyPlaywrightEvidence({
 export function main() {
   const releasePipelineLock = acquireEvidencePipelineLock(
     projectRoot,
-    "Playwright evidence verification"
+    "Playwright evidence verification",
+    { allowInheritedToken: true }
   );
   process.on("exit", releasePipelineLock);
   const report = verifyPlaywrightEvidence();

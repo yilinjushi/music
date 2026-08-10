@@ -1,10 +1,9 @@
 import { chromium, defineConfig, devices } from "@playwright/test";
-import { acquirePlaywrightRunLock } from "./scripts/playwright-evidence-lock.mjs";
+import { assertPlaywrightRunLockHeld } from "./scripts/playwright-evidence-lock.mjs";
 
-// Config evaluation happens before Playwright clears outputDir or starts its
-// web server. Every run writes the same canonical reporter paths, so both
-// evidence and diagnostic runs must serialize at this earliest boundary.
-acquirePlaywrightRunLock();
+// The package wrapper acquires the lock before Playwright starts. Config
+// evaluation fails closed if somebody bypasses that wrapper, including --list.
+assertPlaywrightRunLockHeld();
 
 const baseUse = {
   browserName: "chromium" as const,

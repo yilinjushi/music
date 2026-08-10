@@ -22,7 +22,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:evidence": "node --test scripts/*.node-test.mjs",
-    "test:e2e": "playwright test",
+    "test:e2e": "node scripts/run-playwright.mjs",
     "verify:playwright-evidence": "node scripts/verify-playwright-evidence.mjs",
     "lighthouse": "node scripts/run-lighthouse.mjs",
     "verify:pwa": "node scripts/verify-pwa.mjs",

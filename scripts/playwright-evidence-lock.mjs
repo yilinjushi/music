@@ -1,81 +1,73 @@
+import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { projectRoot } from "./evidence-utils.mjs";
 import {
+  EVIDENCE_PIPELINE_TOKEN_ENV,
   acquireEvidencePipelineLock,
   evidencePipelineLockPath,
   exclusiveRunLockIsOwnedBy,
 } from "./exclusive-run-lock.mjs";
 
-const PLAYWRIGHT_LOCK_STATE = Symbol.for(
-  "otter-music.playwright-canonical-output-lock"
-);
+export const PLAYWRIGHT_RUN_LOCK_TOKEN_ENV = "MUSIC_PLAYWRIGHT_RUN_LOCK_TOKEN";
 
-function currentState(processRef) {
-  return processRef[PLAYWRIGHT_LOCK_STATE] ?? null;
+function canonicalRoot(root) {
+  return realpathSync.native(resolve(root));
 }
 
 export function acquirePlaywrightRunLock({
   root = projectRoot,
-  processRef = process,
+  environment = process.env,
 } = {}) {
-  const normalizedRoot = resolve(root);
-  const active = currentState(processRef);
-  if (active && !active.released) {
-    if (active.root !== normalizedRoot) {
-      throw new Error(
-        `Playwright canonical output lock already protects ${active.root}`
-      );
-    }
-    return active;
-  }
-
+  const normalizedRoot = canonicalRoot(root);
   const releaseExclusiveLock = acquireEvidencePipelineLock(
     normalizedRoot,
     "Playwright canonical output"
   );
-  const state = {
-    root: normalizedRoot,
-    lockDirectory: evidencePipelineLockPath(normalizedRoot),
-    pid: process.pid,
-    token: releaseExclusiveLock.token,
-    released: false,
-    releaseOnProcessExit: null,
-  };
+  const previousPlaywrightToken = environment[PLAYWRIGHT_RUN_LOCK_TOKEN_ENV];
+  const previousPipelineToken = environment[EVIDENCE_PIPELINE_TOKEN_ENV];
+  environment[PLAYWRIGHT_RUN_LOCK_TOKEN_ENV] = releaseExclusiveLock.token;
+  environment[EVIDENCE_PIPELINE_TOKEN_ENV] = releaseExclusiveLock.token;
 
-  const releaseOnProcessExit = () => {
-    if (state.released) return;
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
     releaseExclusiveLock();
-    state.released = true;
-    if (currentState(processRef) === state) {
-      delete processRef[PLAYWRIGHT_LOCK_STATE];
+    if (previousPlaywrightToken === undefined) {
+      delete environment[PLAYWRIGHT_RUN_LOCK_TOKEN_ENV];
+    } else {
+      environment[PLAYWRIGHT_RUN_LOCK_TOKEN_ENV] = previousPlaywrightToken;
+    }
+    if (previousPipelineToken === undefined) {
+      delete environment[EVIDENCE_PIPELINE_TOKEN_ENV];
+    } else {
+      environment[EVIDENCE_PIPELINE_TOKEN_ENV] = previousPipelineToken;
     }
   };
-  state.releaseOnProcessExit = releaseOnProcessExit;
-  processRef[PLAYWRIGHT_LOCK_STATE] = state;
-  processRef.once("exit", releaseOnProcessExit);
-  return state;
+  release.token = releaseExclusiveLock.token;
+  release.root = normalizedRoot;
+  release.trackActiveChild = releaseExclusiveLock.trackActiveChild;
+  release.untrackActiveChild = releaseExclusiveLock.untrackActiveChild;
+  return release;
 }
 
 export function assertPlaywrightRunLockHeld({
   root = projectRoot,
-  processRef = process,
+  environment = process.env,
 } = {}) {
-  const state = currentState(processRef);
-  const normalizedRoot = resolve(root);
+  const normalizedRoot = canonicalRoot(root);
+  const token = environment[PLAYWRIGHT_RUN_LOCK_TOKEN_ENV];
   if (
-    !state ||
-    state.released ||
-    state.root !== normalizedRoot ||
-    !exclusiveRunLockIsOwnedBy(state.lockDirectory, {
-      pid: state.pid,
-      token: state.token,
+    !exclusiveRunLockIsOwnedBy(evidencePipelineLockPath(normalizedRoot), {
+      pid: null,
+      token,
     })
   ) {
     throw new Error(
-      "Playwright canonical output write attempted without its live pipeline lock"
+      "Playwright canonical output write attempted without its live outer pipeline lock"
     );
   }
-  return state;
+  return { root: normalizedRoot, token };
 }
 
 export function withPlaywrightRunLockHeld(callback, options) {
@@ -83,8 +75,8 @@ export function withPlaywrightRunLockHeld(callback, options) {
   try {
     return callback();
   } finally {
-    // The callback is intentionally synchronous: this second ownership check
-    // binds the final filesystem write itself, not merely reporter startup.
+    // Reporter writes are synchronous. Rechecking after the callback proves
+    // the outer wrapper still owns the lock at the final filesystem mutation.
     assertPlaywrightRunLockHeld(options);
   }
 }

@@ -63,9 +63,6 @@ jobs:
           PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH: ${{ steps.chromium.outputs.path }}
         run: npm run test:e2e
 
-      - name: Verify Playwright execution evidence
-        run: npm run verify:playwright-evidence
-
       - name: Lighthouse mobile budgets
         env:
           CHROME_PATH: ${{ steps.chromium.outputs.path }}
