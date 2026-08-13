@@ -17,7 +17,7 @@
     },
   ],
   "vars": {
-    "APP_ORIGIN": "https://music-8b8.pages.dev",
+    "APP_ORIGIN": "https://music.80007001.xyz",
     "NETEASE_SESSION_TTL_SECONDS": "2592000",
   },
 }
