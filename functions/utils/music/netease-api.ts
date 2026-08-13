@@ -227,8 +227,7 @@ export async function getPlaylistDetail(
       (typeof reportedTrackCount !== "number" ||
         !Number.isSafeInteger(reportedTrackCount) ||
         reportedTrackCount < 0 ||
-        reportedTrackCount > NETEASE_PLAYLIST_MAX_TRACKS ||
-        reportedTrackCount > playlist.trackIds.length))
+        reportedTrackCount > NETEASE_PLAYLIST_MAX_TRACKS))
   ) {
     throw new Error("NetEase playlist exceeds the safe track limit");
   }

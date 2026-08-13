@@ -56,6 +56,35 @@ describe("server NetEase playlist budget", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("returns visible tracks when unavailable songs make trackCount larger", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            playlist: {
+              id: 7,
+              name: "partially visible",
+              trackCount: 2,
+              trackIds: [{ id: 1 }],
+            },
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ songs: [{ id: 1, name: "Visible" }] }), {
+          headers: { "Content-Type": "application/json" },
+        })
+      );
+
+    const detail = await getPlaylistDetail("7", "");
+
+    expect(detail.trackCount).toBe(2);
+    expect(detail.tracks).toEqual([{ id: 1, name: "Visible" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it("uses fixed 100-track batches under the total request cap", async () => {
     const trackCount = NETEASE_PLAYLIST_TRACK_BATCH_SIZE * 2 + 50;
     const trackIds = Array.from({ length: trackCount }, (_, index) => ({
