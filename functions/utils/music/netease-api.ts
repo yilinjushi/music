@@ -252,49 +252,54 @@ async function getPlaylistTracksDetail(
   budget: PlaylistUpstreamBudget
 ): Promise<SongDetail[]> {
   const url = `${BASE_URL}/weapi/v3/song/detail`;
-  const result: SongDetail[] = [];
-
+  const batches: number[][] = [];
   for (
     let index = 0;
     index < trackIds.length;
     index += NETEASE_PLAYLIST_TRACK_BATCH_SIZE
   ) {
-    const batch = trackIds.slice(
-      index,
-      index + NETEASE_PLAYLIST_TRACK_BATCH_SIZE
+    batches.push(
+      trackIds.slice(index, index + NETEASE_PLAYLIST_TRACK_BATCH_SIZE)
     );
-    const c = `[${batch.map((id) => `{"id":${id}}`).join(",")}]`;
-    const ids = `[${batch.join(",")}]`;
-    const response = await requestPlaylistWeapi<{ songs?: SongDetail[] }>(
-      budget,
-      url,
-      { c, ids },
-      cookie
-    );
-    if (!Array.isArray(response.songs)) {
-      throw new Error("Invalid NetEase song detail response");
-    }
-    if (response.songs.length > batch.length) {
-      throw new Error("NetEase song detail response exceeded its batch");
-    }
-    const batchIds = new Set(batch);
-    const responseIds = new Set<number>();
-    for (const song of response.songs) {
-      const id = song?.id;
-      if (
-        typeof id !== "number" ||
-        !Number.isSafeInteger(id) ||
-        !batchIds.has(id) ||
-        responseIds.has(id)
-      ) {
-        throw new Error("Invalid NetEase song detail response identity");
+  }
+
+  const responses = await Promise.all(
+    batches.map(async (batch) => {
+      const c = `[${batch.map((id) => `{"id":${id}}`).join(",")}]`;
+      const ids = `[${batch.join(",")}]`;
+      const response = await requestPlaylistWeapi<{ songs?: SongDetail[] }>(
+        budget,
+        url,
+        { c, ids },
+        cookie
+      );
+      if (!Array.isArray(response.songs)) {
+        throw new Error("Invalid NetEase song detail response");
       }
-      responseIds.add(id);
-    }
-    if (result.length + response.songs.length > NETEASE_PLAYLIST_MAX_TRACKS) {
-      throw new Error("NetEase song detail response exceeded the safe limit");
-    }
-    result.push(...response.songs);
+      if (response.songs.length > batch.length) {
+        throw new Error("NetEase song detail response exceeded its batch");
+      }
+      const batchIds = new Set(batch);
+      const responseIds = new Set<number>();
+      for (const song of response.songs) {
+        const id = song?.id;
+        if (
+          typeof id !== "number" ||
+          !Number.isSafeInteger(id) ||
+          !batchIds.has(id) ||
+          responseIds.has(id)
+        ) {
+          throw new Error("Invalid NetEase song detail response identity");
+        }
+        responseIds.add(id);
+      }
+      return response.songs;
+    })
+  );
+
+  const result = responses.flat();
+  if (result.length > NETEASE_PLAYLIST_MAX_TRACKS) {
+    throw new Error("NetEase song detail response exceeded the safe limit");
   }
   return result;
 }

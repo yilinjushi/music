@@ -119,6 +119,49 @@ describe("server NetEase playlist budget", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 
+  it("loads independent song-detail batches concurrently", async () => {
+    const trackIds = Array.from(
+      { length: NETEASE_PLAYLIST_TRACK_BATCH_SIZE + 1 },
+      (_, index) => ({ id: index + 1 })
+    );
+    let pendingBatches = 0;
+    let maxPendingBatches = 0;
+    let batchCall = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ playlist: { id: 7, trackIds } }), {
+          headers: { "Content-Type": "application/json" },
+        })
+      )
+      .mockImplementation(async (_input, init) => {
+        batchCall += 1;
+        const currentBatch = batchCall;
+        pendingBatches += 1;
+        maxPendingBatches = Math.max(maxPendingBatches, pendingBatches);
+        await Promise.resolve();
+        pendingBatches -= 1;
+        const params = new URLSearchParams(String(init?.body));
+        const encryptedRequest = params.get("params");
+        const batchSize = currentBatch === 1 ? 100 : 1;
+        expect(encryptedRequest).toBeTruthy();
+        return new Response(
+          JSON.stringify({
+            songs: Array.from({ length: batchSize }, (_, index) => ({
+              id: currentBatch === 1 ? index + 1 : 101,
+              name: `Song ${index + 1}`,
+            })),
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        );
+      });
+
+    const detail = await getPlaylistDetail("7", "");
+
+    expect(detail.tracks).toHaveLength(101);
+    expect(maxPendingBatches).toBe(2);
+  });
+
   it("rejects extra or unrelated songs returned for a bounded batch", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
