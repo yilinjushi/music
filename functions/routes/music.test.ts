@@ -95,6 +95,44 @@ describe("music route credential boundary", () => {
     expect(await response.text()).not.toContain("canary-cookie");
   });
 
+  it("allows only the signed app session cookie into NetEase routes", async () => {
+    const opaqueSession = `${"a".repeat(43)}.${"b".repeat(43)}`;
+    const response = await musicRoutes.request(
+      "https://music.example/netease/playlist",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://music.example",
+          "Sec-Fetch-Site": "same-origin",
+          Cookie: `__Host-otter_netease_session=${opaqueSession}`,
+        },
+        body: JSON.stringify({ playlistId: "invalid" }),
+      },
+      { APP_ORIGIN: "https://music.example" } as never
+    );
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "Invalid playlist ID" });
+
+    const malformed = await musicRoutes.request(
+      "https://music.example/netease/playlist",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://music.example",
+          "Sec-Fetch-Site": "same-origin",
+          Cookie: "__Host-otter_netease_session=MUSIC_U=canary-cookie",
+        },
+        body: JSON.stringify({ playlistId: "7" }),
+      },
+      { APP_ORIGIN: "https://music.example" } as never
+    );
+    expect(malformed.status).toBe(400);
+    expect(await malformed.text()).not.toContain("canary-cookie");
+  });
+
   it("rejects sensitive form, text, and header fields", async () => {
     const formResponse = await musicRoutes.request(
       "http://localhost/netease/search",

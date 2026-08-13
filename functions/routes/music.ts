@@ -21,6 +21,7 @@ import {
 import { FUNCTION_LOG_EVENTS, logFunctionError } from "@utils/security-logger";
 import { fetchUpstreamWithDeadline } from "@otter-music/shared";
 import { isValidAudioRange, proxyPrivateAudio } from "@utils/proxy/audio";
+import { NETEASE_SESSION_COOKIE } from "@utils/netease-session";
 import {
   checkFixedWindowRateLimit,
   requestClientId,
@@ -171,11 +172,37 @@ async function enforceGenericAudioRateLimit(
   }
 }
 
-function requestHeadersContainSensitiveData(headers: Headers): boolean {
+function cookieContainsSensitiveData(
+  value: string,
+  allowNeteaseSessionCookie: boolean
+): boolean {
+  for (const part of value.split(";")) {
+    const trimmed = part.trim();
+    const separator = trimmed.indexOf("=");
+    if (separator < 1) return true;
+    const name = trimmed.slice(0, separator).trim();
+    const cookieValue = trimmed.slice(separator + 1).trim();
+    if (allowNeteaseSessionCookie && name === NETEASE_SESSION_COOKIE) {
+      if (!/^[A-Za-z0-9_-]{32,}\.[A-Za-z0-9_-]{43}$/.test(cookieValue)) {
+        return true;
+      }
+      continue;
+    }
+    if (containsSensitiveString(trimmed)) return true;
+  }
+  return false;
+}
+
+function requestHeadersContainSensitiveData(
+  headers: Headers,
+  allowNeteaseSessionCookie: boolean
+): boolean {
   let found = false;
   headers.forEach((value, name) => {
     if (name.toLowerCase() === "cookie") {
-      if (containsSensitiveString(value)) found = true;
+      if (cookieContainsSensitiveData(value, allowNeteaseSessionCookie)) {
+        found = true;
+      }
       return;
     }
     if (isSensitiveFieldName(name) || containsSensitiveString(value)) {
@@ -285,7 +312,12 @@ musicRoutes.use("*", async (c, next) => {
     return rejectSensitiveRequest(c);
   }
 
-  if (requestHeadersContainSensitiveData(c.req.raw.headers)) {
+  if (
+    requestHeadersContainSensitiveData(
+      c.req.raw.headers,
+      url.pathname.startsWith("/netease/")
+    )
+  ) {
     return rejectSensitiveRequest(c);
   }
 
