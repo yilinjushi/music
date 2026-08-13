@@ -598,6 +598,48 @@ test("search uses a deterministic same-origin NetEase fixture", async ({
   ).toBeVisible();
 });
 
+test("a slow 362-track NetEase playlist loads on mobile", async ({
+  page,
+}, testInfo) => {
+  onlyBaseline(testInfo);
+  await seedBrowserState(page, { authenticated: true });
+  await mockSameOriginApi(page, { session: "authenticated" });
+  await page.route("**/music-api/netease/playlist", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 12_500));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        id: 366135532,
+        name: "我喜欢的音乐",
+        coverImgUrl: "",
+        description: "",
+        creator: simulatedProfile,
+        trackCount: 362,
+        playCount: 1,
+        tracks: Array.from({ length: 362 }, (_, index) => ({
+          id: 80_000 + index,
+          name: `长歌单曲目 ${index + 1}`,
+          ar: [{ id: 81, name: "测试歌手" }],
+          al: { id: 91, name: "测试专辑", picUrl: "" },
+          fee: 0,
+          dt: 180_000,
+        })),
+      }),
+    });
+  });
+
+  await page.goto("/netease-playlist/366135532", {
+    waitUntil: "domcontentloaded",
+  });
+  await expect(
+    page.getByRole("heading", { name: "我喜欢的音乐", exact: true }).first()
+  ).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText("362 首", { exact: true })).toBeVisible();
+  await expect(page.getByText("长歌单曲目 1", { exact: true })).toBeVisible();
+  await expect(page.getByText("加载失败", { exact: true })).toHaveCount(0);
+});
+
 test("keyboard focus reaches the primary navigation", async ({ page }) => {
   await openCorePage(page);
   for (let index = 0; index < 16; index += 1) {

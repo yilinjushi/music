@@ -579,6 +579,29 @@ describe("NetEase browser session client", () => {
     expect(cacheOpen).not.toHaveBeenCalled();
   });
 
+  it("forwards playlist cancellation while allowing a longer mobile deadline", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation((_url, init) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => {
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+          });
+        });
+      });
+    const owner = new AbortController();
+    const request = getPlaylistDetail("neplaylist_7", "", owner.signal);
+
+    await vi.advanceTimersByTimeAsync(12_001);
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(false);
+
+    owner.abort();
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+    expect(fetchMock.mock.calls[0][1]?.signal?.aborted).toBe(true);
+    vi.useRealTimers();
+  });
+
   it("fetches market playlists and toplists with no-store and no Cache Storage", async () => {
     const cacheOpen = vi.fn();
     vi.stubGlobal("caches", { open: cacheOpen });

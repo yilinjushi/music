@@ -111,14 +111,14 @@ export function NeteaseDetail({
 
   const { loading, error, detail, tracks, setDetail, setTracks, retry } =
     useDetailPage<UnifiedDetail>(
-      async (_signal) => {
+      async (signal) => {
         if (!id) throw new Error("No id");
 
         let rawDetail: UnifiedDetail;
         let rawTracks: SongDetail[];
 
         if (type === "playlist") {
-          const res = await getPlaylistDetail(id);
+          const res = await getPlaylistDetail(id, "", signal);
           if (!res) throw new Error("Not found");
           rawDetail = {
             name: res.name,

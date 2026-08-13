@@ -41,6 +41,7 @@ import { normalizePersistableResourceUrl } from "@shared/utils/url";
 
 const NETEASE_API_PREFIX = "/music-api/netease";
 const NETWORK_TIMEOUT_MS = 12000;
+const PLAYLIST_DETAIL_TIMEOUT_MS = 30000;
 const PENDING_LOGOUT_KEY = "otter_netease_pending_logout";
 
 type NeteaseEnvelope<T> = { data: T };
@@ -116,13 +117,14 @@ async function clearSessionBoundClientCaches(): Promise<void> {
 async function fetchNeteaseApi<T>(
   path: `/${string}`,
   body?: Record<string, unknown>,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  timeoutMs = NETWORK_TIMEOUT_MS
 ): Promise<T> {
   const controller = new AbortController();
   const onCallerAbort = () => controller.abort();
   if (signal?.aborted) onCallerAbort();
   else signal?.addEventListener("abort", onCallerAbort, { once: true });
-  const timer = window.setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     throwIfNeteaseRequestAborted(controller.signal);
@@ -290,10 +292,16 @@ export const getRecommendPlaylists = async (
 
 export const getPlaylistDetail = (
   playlistId: string,
-  _legacyCredential: string = ""
+  _legacyCredential: string = "",
+  signal?: AbortSignal
 ) => {
   const realId = playlistId.replace(/^(neplaylist_|ne_playlist_)/, "");
-  return fetchNeteaseApi<PlaylistDetail>("/playlist", { playlistId: realId });
+  return fetchNeteaseApi<PlaylistDetail>(
+    "/playlist",
+    { playlistId: realId },
+    signal,
+    PLAYLIST_DETAIL_TIMEOUT_MS
+  );
 };
 
 export const getPlaylistDynamicDetail = async (
