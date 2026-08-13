@@ -557,7 +557,7 @@ for (const corePage of [
         page.getByPlaceholder("搜索音乐、歌手或专辑...")
       ).toBeVisible();
       await expect(
-        page.getByText("Netease", { exact: true }).first()
+        page.getByText("网易云(官方)", { exact: true }).first()
       ).toBeVisible();
     }
     await page.evaluate(async () => {
@@ -588,7 +588,7 @@ test("search uses a deterministic same-origin NetEase fixture", async ({
   await openCorePage(page);
   const input = page.getByPlaceholder("搜索音乐、歌手或专辑...");
   await expect(
-    page.getByText("Netease", { exact: true }).first()
+    page.getByText("网易云(官方)", { exact: true }).first()
   ).toBeVisible();
   await input.fill("测试歌曲");
   await input.press("Enter");

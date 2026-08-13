@@ -71,7 +71,7 @@ export const createUiSlice: StateCreator<MusicState, [], [], UiSlice> = (
   bilibiliKeepOriginalMeta: false,
   bilibiliAutoMatchSuffix: "高音质 原曲",
   fullScreenBackgroundMode: "theme",
-  showSourceBadge: true,
+  showSourceBadge: false,
   playbackSpeed: 1.0,
   isFullScreenPlayer: false,
   setQuality: (quality) => set({ quality }),

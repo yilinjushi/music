@@ -320,8 +320,8 @@ describe("MusicSearchView", () => {
       ])
     ).toEqual([
       ["all", "聚合搜索"],
-      ["netease", "网易云音乐"],
-      ["_netease", "Netease"],
+      ["netease", "网易云(备用)"],
+      ["_netease", "网易云(官方)"],
       ["joox", "Joox"],
       ["bilibili", "B站"],
       ["kuwo", "酷我音乐"],
