@@ -127,7 +127,7 @@ describe("server NetEase playlist budget", () => {
     let pendingBatches = 0;
     let maxPendingBatches = 0;
     let batchCall = 0;
-    const fetchMock = vi
+    vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ playlist: { id: 7, trackIds } }), {
