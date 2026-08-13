@@ -7,6 +7,8 @@ import {
   fetchUpstreamWithDeadline,
   weapi,
 } from "@otter-music/shared";
+import forge from "node-forge/lib/forge";
+import "node-forge/lib/md5";
 import type {
   QrKeyResponse,
   QrCheckResponse,
@@ -302,6 +304,27 @@ async function getPlaylistTracksDetail(
     throw new Error("NetEase song detail response exceeded the safe limit");
   }
   return result;
+}
+
+export async function loginCellphone(phone: string, password: string) {
+  const passwordHash = forge.md.md5
+    .create()
+    .update(forge.util.encodeUtf8(password))
+    .digest()
+    .toHex();
+  return requestWeapi<{
+    code: number;
+    message?: string;
+    profile?: UserProfile;
+    account?: { id?: number };
+  }>(`${BASE_URL}/weapi/w/login/cellphone`, {
+    type: "1",
+    https: "true",
+    phone,
+    countrycode: "86",
+    password: passwordHash,
+    rememberLogin: "true",
+  });
 }
 
 async function getTracksDetail(trackIds: number[], cookie: string) {

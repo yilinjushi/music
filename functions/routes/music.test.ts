@@ -133,6 +133,36 @@ describe("music route credential boundary", () => {
     expect(await malformed.text()).not.toContain("canary-cookie");
   });
 
+  it("allows a cellphone password only into the strict login validator", async () => {
+    const response = await musicRoutes.request(
+      "https://music.example/netease/login/cellphone",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: "13800138000", password: "\n" }),
+      },
+      { APP_ORIGIN: "https://music.example" } as never
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: "Client-supplied NetEase credentials are not accepted",
+    });
+
+    const wrongRoute = await musicRoutes.request(
+      "https://music.example/netease/search",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: "13800138000", password: "secret" }),
+      },
+      { APP_ORIGIN: "https://music.example" } as never
+    );
+    expect(wrongRoute.status).toBe(400);
+    expect(await wrongRoute.json()).toEqual({
+      error: "Sensitive credential data is not accepted",
+    });
+  });
+
   it("rejects sensitive form, text, and header fields", async () => {
     const formResponse = await musicRoutes.request(
       "http://localhost/netease/search",

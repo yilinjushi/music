@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   checkQrStatus: vi.fn(),
   getNeteaseSession: vi.fn(),
   getQrKey: vi.fn(),
+  loginCellphone: vi.fn(),
   logoutNeteaseSession: vi.fn(),
 }));
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
@@ -125,9 +126,22 @@ describe("NeteaseLogin account operation ownership", () => {
       candidate.textContent?.includes(name)
     );
     expect(button).toBeDefined();
-    act(() =>
-      button!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    );
+    act(() => {
+      button!.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      button!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+      button!.click();
+    });
+  };
+
+  const openQrLogin = async () => {
+    const qrCallsBeforeOpen = api.getQrKey.mock.calls.length;
+    clickButton("登录");
+    await flush();
+    expect(api.getQrKey).toHaveBeenCalledTimes(qrCallsBeforeOpen);
+    clickButton("扫码");
+    await flush();
+    await flush();
+    expect(api.getQrKey).toHaveBeenCalledTimes(qrCallsBeforeOpen + 1);
   };
 
   beforeEach(() => {
@@ -159,8 +173,7 @@ describe("NeteaseLogin account operation ownership", () => {
       .mockImplementationOnce(() => oldKey.promise)
       .mockImplementationOnce(() => newKey.promise);
 
-    clickButton("登录");
-    await flush();
+    await openQrLogin();
     const oldSignal = api.getQrKey.mock.calls[0][0] as AbortSignal;
     expect(oldSignal.aborted).toBe(false);
 
@@ -171,8 +184,7 @@ describe("NeteaseLogin account operation ownership", () => {
     act(() => close!.click());
     expect(oldSignal.aborted).toBe(true);
 
-    clickButton("登录");
-    await flush();
+    await openQrLogin();
     const newSignal = api.getQrKey.mock.calls[1][0] as AbortSignal;
     expect(newSignal.aborted).toBe(false);
 
@@ -200,8 +212,7 @@ describe("NeteaseLogin account operation ownership", () => {
       .mockReturnValueOnce(staleStatus.promise)
       .mockImplementationOnce(() => new Promise(() => {}));
 
-    clickButton("登录");
-    await flush();
+    await openQrLogin();
     const staleSignal = api.checkQrStatus.mock.calls[0][1] as AbortSignal;
     expect(staleSignal.aborted).toBe(false);
 
@@ -209,8 +220,7 @@ describe("NeteaseLogin account operation ownership", () => {
       'button[aria-label="关闭抽屉"]'
     );
     act(() => close!.click());
-    clickButton("登录");
-    await flush();
+    await openQrLogin();
     expect(staleSignal.aborted).toBe(true);
     expect(api.checkQrStatus).toHaveBeenCalledTimes(2);
 
@@ -243,8 +253,7 @@ describe("NeteaseLogin account operation ownership", () => {
       -1
     )?.[0] as AbortSignal;
 
-    clickButton("登录");
-    await flush();
+    await openQrLogin();
     expect(restoreSignal.aborted).toBe(true);
     await act(async () =>
       qrStatus.resolve({ code: 803, message: "ok", profile: newProfile })
@@ -302,8 +311,7 @@ describe("NeteaseLogin account operation ownership", () => {
     api.checkQrStatus.mockReturnValueOnce(qrStatus.promise);
     api.logoutNeteaseSession.mockReturnValueOnce(logout.promise);
 
-    clickButton("登录");
-    await flush();
+    await openQrLogin();
     const qrSignal = api.checkQrStatus.mock.calls[0][1] as AbortSignal;
     act(() => useNeteaseStore.getState().setSession(oldProfile));
     await flush();

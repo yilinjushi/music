@@ -1,4 +1,10 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  type FormEvent,
+} from "react";
 import {
   User,
   RefreshCw,
@@ -7,6 +13,8 @@ import {
   ScanLine,
   Download,
   LogOut,
+  KeyRound,
+  Smartphone,
 } from "lucide-react";
 import {
   Drawer,
@@ -16,6 +24,8 @@ import {
   DrawerDescription,
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { SettingItem } from "./SettingItem";
 import {
@@ -23,6 +33,7 @@ import {
   getNeteaseSession,
   getQrKey,
   logoutNeteaseSession,
+  loginCellphone,
 } from "@/lib/netease/netease-api";
 import type { UserProfile } from "@/lib/netease/netease-types";
 import toast from "react-hot-toast";
@@ -40,6 +51,7 @@ const STATUS_MESSAGES = {
 } as const;
 
 type QrStatus = keyof typeof STATUS_MESSAGES;
+type LoginMode = "cellphone" | "qr";
 
 interface AccountOperationOwner {
   generation: number;
@@ -54,6 +66,9 @@ export function NeteaseLogin() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [qrUrl, setQrUrl] = useState("");
   const [qrStatus, setQrStatus] = useState<QrStatus>("loading");
+  const [loginMode, setLoginMode] = useState<LoginMode>("cellphone");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
 
   const qrCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,6 +135,7 @@ export function NeteaseLogin() {
       setSession(profile);
       invalidateOwner(owner);
       setShowLoginDialog(false);
+      setPassword("");
       resetDialogState();
       toast.success("网易云登录成功");
     },
@@ -242,23 +258,31 @@ export function NeteaseLogin() {
   }, [beginOperation, clearSession, invalidateOwner, isOwner, setSession]);
 
   useEffect(() => {
-    if (!showLoginDialog) return;
+    if (!showLoginDialog || loginMode !== "qr") return;
     const owner = beginOperation();
     void fetchQrCode(owner);
     return () => invalidateOwner(owner);
-  }, [beginOperation, fetchQrCode, invalidateOwner, showLoginDialog]);
+  }, [
+    beginOperation,
+    fetchQrCode,
+    invalidateOwner,
+    loginMode,
+    showLoginDialog,
+  ]);
 
   useEffect(() => () => invalidateOwner(), [invalidateOwner]);
 
   const startLogin = useCallback(() => {
     invalidateOwner();
     resetDialogState();
+    setLoginMode("cellphone");
     setShowLoginDialog(true);
   }, [invalidateOwner, resetDialogState]);
 
   const closeLoginDialog = useCallback(() => {
     invalidateOwner();
     setShowLoginDialog(false);
+    setPassword("");
     resetDialogState();
   }, [invalidateOwner, resetDialogState]);
 
@@ -271,6 +295,50 @@ export function NeteaseLogin() {
       toast.error("二维码保存失败");
     }
   }, []);
+
+  const handleCellphoneLogin = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!/^1\d{10}$/.test(phone)) {
+        toast.error("请输入正确的 11 位手机号");
+        return;
+      }
+      if (!password) {
+        toast.error("请输入网易云密码");
+        return;
+      }
+      const owner = beginOperation();
+      setLoading(true);
+      try {
+        const profile = await loginCellphone(
+          phone,
+          password,
+          owner.controller.signal
+        );
+        if (!isOwner(owner)) return;
+        await onLoginSuccess(owner, profile);
+      } catch (error) {
+        if (
+          isOwner(owner) &&
+          !(error instanceof Error && error.name === "AbortError")
+        ) {
+          toast.error("登录失败，请检查账号密码；遇到网易验证时可改用扫码登录");
+        }
+      } finally {
+        if (isOwner(owner)) setLoading(false);
+      }
+    },
+    [beginOperation, isOwner, onLoginSuccess, password, phone]
+  );
+
+  const changeLoginMode = useCallback(
+    (value: string) => {
+      invalidateOwner();
+      resetDialogState();
+      setLoginMode(value === "qr" ? "qr" : "cellphone");
+    },
+    [invalidateOwner, resetDialogState]
+  );
 
   const handleLogout = async () => {
     if (loggingOut) return;
@@ -342,84 +410,174 @@ export function NeteaseLogin() {
       >
         <DrawerContent className="max-h-[90vh]">
           <DrawerHeader className="mb-2 px-4">
-            <DrawerTitle className="text-center text-lg">扫码登录</DrawerTitle>
+            <DrawerTitle className="text-center text-lg">
+              登录网易云音乐
+            </DrawerTitle>
             <DrawerDescription className="text-center text-xs">
-              打开网易云音乐的扫一扫
+              手机号密码登录，扫码作为备用方式
             </DrawerDescription>
           </DrawerHeader>
 
-          <div className="flex flex-col items-center space-y-4 overflow-y-auto px-4 pb-6">
-            <div className="relative flex h-[180px] w-[180px] items-center justify-center">
-              {qrStatus === "loading" && (
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
-              )}
+          <Tabs
+            value={loginMode}
+            onValueChange={changeLoginMode}
+            className="overflow-y-auto px-4 pb-6"
+          >
+            <TabsList className="mx-auto grid w-full max-w-sm grid-cols-2">
+              <TabsTrigger value="cellphone">
+                <Smartphone />
+                手机号
+              </TabsTrigger>
+              <TabsTrigger value="qr">
+                <ScanLine />
+                扫码
+              </TabsTrigger>
+            </TabsList>
 
-              {(qrStatus === "waiting" ||
-                qrStatus === "scanned" ||
-                qrStatus === "success") &&
-                qrUrl && (
-                  <div className="h-full w-full rounded-xl bg-white p-2 shadow-sm">
-                    <QRCodeCanvas
-                      ref={qrCanvasRef}
-                      value={qrUrl}
-                      size={324}
-                      level="M"
-                      className="h-full w-full"
-                    />
-                  </div>
-                )}
-
-              {qrStatus === "scanned" && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-background/65 backdrop-blur-sm">
-                  <Check className="mb-2 h-9 w-9 text-primary" />
-                  <span className="text-sm font-medium">已扫码</span>
-                  <span className="mt-1 text-[11px] text-muted-foreground">
-                    请在网易云音乐中确认
-                  </span>
-                </div>
-              )}
-
-              {qrStatus === "expired" && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-background/80 backdrop-blur-sm">
-                  <ScanLine className="mb-3 h-7 w-7 text-muted-foreground/50" />
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    onClick={refreshQrCode}
-                    className="h-8 rounded-full px-4 text-xs"
+            <TabsContent
+              value="cellphone"
+              className="mx-auto mt-4 w-full max-w-sm"
+            >
+              <form
+                className="space-y-4"
+                onSubmit={(event) => void handleCellphoneLogin(event)}
+              >
+                <div className="space-y-2">
+                  <label
+                    htmlFor="netease-phone"
+                    className="text-sm font-medium"
                   >
-                    <RefreshCw className="mr-1.5 h-3 w-3" />
-                    刷新二维码
-                  </Button>
+                    手机号
+                  </label>
+                  <Input
+                    id="netease-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    value={phone}
+                    onChange={(event) =>
+                      setPhone(
+                        event.target.value.replace(/\D/g, "").slice(0, 11)
+                      )
+                    }
+                    placeholder="11 位手机号"
+                    disabled={loading}
+                  />
                 </div>
-              )}
-            </div>
-
-            <div className="space-y-1 text-center">
-              <p className="text-sm font-medium">{STATUS_MESSAGES[qrStatus]}</p>
-              <p className="text-[11px] text-muted-foreground/70">
-                网易凭证在服务端加密保存，浏览器不会接触账号凭证
-              </p>
-            </div>
-
-            {qrUrl && (qrStatus === "waiting" || qrStatus === "scanned") && (
-              <div className="w-full max-w-xs space-y-2 rounded-xl bg-muted/30 p-3 text-center">
-                <p className="text-[11px] leading-relaxed text-muted-foreground">
-                  只有这一部手机？先保存二维码，再到网易云音乐“扫一扫”中从相册选择。
-                </p>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="netease-password"
+                    className="text-sm font-medium"
+                  >
+                    密码
+                  </label>
+                  <Input
+                    id="netease-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="网易云音乐密码"
+                    maxLength={256}
+                    disabled={loading}
+                  />
+                </div>
                 <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="w-full rounded-full"
-                  onClick={() => void handleSaveQr()}
+                  type="submit"
+                  className="h-11 w-full"
+                  disabled={loading}
                 >
-                  <Download className="mr-1.5 h-3.5 w-3.5" />
-                  保存二维码图片
+                  {loading ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <KeyRound />
+                  )}
+                  登录
                 </Button>
+                <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
+                  密码仅用于本次登录请求，不会保存在浏览器；如触发网易安全验证，请切换扫码登录。
+                </p>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="qr" className="mt-4">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="relative flex h-[180px] w-[180px] items-center justify-center">
+                  {qrStatus === "loading" && (
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
+                  )}
+
+                  {(qrStatus === "waiting" ||
+                    qrStatus === "scanned" ||
+                    qrStatus === "success") &&
+                    qrUrl && (
+                      <div className="h-full w-full rounded-xl bg-white p-2 shadow-sm">
+                        <QRCodeCanvas
+                          ref={qrCanvasRef}
+                          value={qrUrl}
+                          size={324}
+                          level="M"
+                          className="h-full w-full"
+                        />
+                      </div>
+                    )}
+
+                  {qrStatus === "scanned" && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-background/65 backdrop-blur-sm">
+                      <Check className="mb-2 h-9 w-9 text-primary" />
+                      <span className="text-sm font-medium">已扫码</span>
+                      <span className="mt-1 text-[11px] text-muted-foreground">
+                        请在网易云音乐中确认
+                      </span>
+                    </div>
+                  )}
+
+                  {qrStatus === "expired" && (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-background/80 backdrop-blur-sm">
+                      <ScanLine className="mb-3 h-7 w-7 text-muted-foreground/50" />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={refreshQrCode}
+                        className="h-8 rounded-full px-4 text-xs"
+                      >
+                        <RefreshCw className="mr-1.5 h-3 w-3" />
+                        刷新二维码
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-1 text-center">
+                  <p className="text-sm font-medium">
+                    {STATUS_MESSAGES[qrStatus]}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/70">
+                    网易凭证在服务端加密保存，浏览器不会接触账号凭证
+                  </p>
+                </div>
+
+                {qrUrl &&
+                  (qrStatus === "waiting" || qrStatus === "scanned") && (
+                    <div className="w-full max-w-xs space-y-2 rounded-xl bg-muted/30 p-3 text-center">
+                      <p className="text-[11px] leading-relaxed text-muted-foreground">
+                        只有这一部手机？先保存二维码，再到网易云音乐“扫一扫”中从相册选择。
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="w-full rounded-full"
+                        onClick={() => void handleSaveQr()}
+                      >
+                        <Download className="mr-1.5 h-3.5 w-3.5" />
+                        保存二维码图片
+                      </Button>
+                    </div>
+                  )}
               </div>
-            )}
-          </div>
+            </TabsContent>
+          </Tabs>
         </DrawerContent>
       </Drawer>
 

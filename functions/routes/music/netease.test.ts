@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   getPlaylistDynamicDetail: vi.fn(),
   getQrKey: vi.fn(),
   checkQrStatus: vi.fn(),
+  loginCellphone: vi.fn(),
   getMyInfo: vi.fn(),
   getRecommendPlaylists: vi.fn(),
   search: vi.fn(),
@@ -425,6 +426,51 @@ describe("NetEase session routes", () => {
     expect(text).not.toContain("secret.example");
     expect(text).not.toContain("canary-response");
     expect(text.toLowerCase()).not.toContain("authorization");
+  });
+
+  it("turns cellphone login into an opaque session without returning the password", async () => {
+    const env = createEnv();
+    api.loginCellphone.mockResolvedValue({
+      data: { code: 200, profile },
+      cookie: "MUSIC_U=phone-secret; __csrf=csrf-secret",
+    });
+    const response = await neteaseRoutes.request(
+      "/login/cellphone",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: "13800138000",
+          password: "test-password",
+        }),
+      },
+      env
+    );
+    const text = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(api.loginCellphone).toHaveBeenCalledWith(
+      "13800138000",
+      "test-password"
+    );
+    expect(text).not.toContain("test-password");
+    expect(text).not.toContain("MUSIC_U");
+    expect(response.headers.get("set-cookie")).toContain("HttpOnly");
+  });
+
+  it("rejects malformed cellphone credentials before calling upstream", async () => {
+    const env = createEnv();
+    const response = await neteaseRoutes.request(
+      "/login/cellphone",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: "not-a-phone", password: "secret" }),
+      },
+      env
+    );
+    expect(response.status).toBe(400);
+    expect(api.loginCellphone).not.toHaveBeenCalled();
   });
 
   it("whitelists playlist fields before the outer response scanner", async () => {

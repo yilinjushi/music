@@ -198,6 +198,19 @@ export const checkQrStatus = async (
   return result;
 };
 
+export const loginCellphone = async (
+  phone: string,
+  password: string,
+  signal?: AbortSignal
+): Promise<UserProfile> => {
+  const result = await fetchNeteaseApi<{
+    authenticated: true;
+    profile: UserProfile;
+  }>("/login/cellphone", { phone, password }, signal);
+  setPendingLogout(false);
+  return result.profile;
+};
+
 export const getNeteaseSession = async (
   signal?: AbortSignal
 ): Promise<UserProfile | null> => {

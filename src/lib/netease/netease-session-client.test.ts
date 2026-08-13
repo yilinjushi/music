@@ -6,6 +6,7 @@ import {
   getPlaylists,
   getPlaylistDetail,
   getQrKey,
+  loginCellphone,
   getSongUrl,
   getSubscribedAlbums,
   getToplist,
@@ -363,6 +364,23 @@ describe("NetEase browser session client", () => {
       key: "key&injected=true",
     });
     expect(init?.credentials).toBe("include");
+  });
+
+  it("posts cellphone credentials once without putting them in the URL", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ authenticated: true, profile }));
+    await expect(
+      loginCellphone("13800138000", "one-time-password")
+    ).resolves.toEqual(profile);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/music-api/netease/login/cellphone");
+    expect(String(url)).not.toContain("13800138000");
+    expect(init?.credentials).toBe("include");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      phone: "13800138000",
+      password: "one-time-password",
+    });
   });
 
   it("forwards QR owner signals without adding request URL state", async () => {

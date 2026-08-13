@@ -16,6 +16,7 @@ import {
   getPlaylistDynamicDetail,
   getQrKey,
   checkQrStatus,
+  loginCellphone,
   getMyInfo,
   getRecommendPlaylists,
   search,
@@ -87,6 +88,8 @@ const SAFE_ERROR_VALUES = new Set([
   "Cross-site request rejected",
   "Client-supplied NetEase credentials are not accepted",
   "Invalid QR key",
+  "Invalid cellphone login",
+  "NetEase login rejected",
   "NetEase profile unavailable",
   "Unauthorized",
   "ID required",
@@ -108,6 +111,7 @@ const NETEASE_PLAYLIST_ID = /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
 const NETEASE_ALBUM_ID = /^(?:(?:nealbum|ne_album)_)?\d{1,20}$/;
 const NETEASE_ARTIST_ID = /^(?:(?:neartist|ne_artist)_)?\d{1,20}$/;
 const ALLOWED_FETCH_SITES = new Set(["same-origin", "same-site"]);
+const CELLPHONE_PATTERN = /^1\d{10}$/;
 
 async function readStrictJsonObject(
   c: NeteaseContext,
@@ -152,6 +156,22 @@ function rejectsPublicRequestSource(c: NeteaseContext): boolean {
 
 function containsClientCredential(value: unknown): boolean {
   return containsSensitiveData(value);
+}
+
+function isCellphoneLoginBody(value: unknown): value is {
+  phone: string;
+  password: string;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const body = value as Record<string, unknown>;
+  return (
+    Object.keys(body).length === 2 &&
+    CELLPHONE_PATTERN.test(typeof body.phone === "string" ? body.phone : "") &&
+    typeof body.password === "string" &&
+    body.password.length >= 1 &&
+    body.password.length <= 256 &&
+    !containsControlCharacter(body.password)
+  );
 }
 
 function normalizeSessionProfile(value: unknown): {
@@ -444,7 +464,9 @@ neteaseRoutes.use("*", async (c, next) => {
     c.req.header("Content-Type")?.toLowerCase().includes("application/json")
   ) {
     const body = await c.req.json<unknown>().catch(() => null);
-    if (containsClientCredential(body)) {
+    const cellphoneLogin =
+      c.req.path.endsWith("/login/cellphone") && isCellphoneLoginBody(body);
+    if (!cellphoneLogin && containsClientCredential(body)) {
       return privateJson(
         c,
         { error: "Client-supplied NetEase credentials are not accepted" },
@@ -477,6 +499,36 @@ neteaseRoutes.use("*", async (c, next) => {
         );
       }
     }
+  }
+});
+
+neteaseRoutes.post("/login/cellphone", async (c) => {
+  const limited = await loginRateLimit(c, "netease-cellphone-login", 5);
+  if (limited) return limited;
+  const body = await c.req.json<unknown>().catch(() => null);
+  if (!isCellphoneLoginBody(body)) {
+    return privateJson(c, { error: "Invalid cellphone login" }, 400);
+  }
+
+  try {
+    const result = await loginCellphone(body.phone, body.password);
+    if (result.data.code !== 200 || !result.cookie) {
+      return privateJson(c, { error: "NetEase login rejected" }, 401);
+    }
+    const profile =
+      normalizeSessionProfile(result.data.profile) ??
+      normalizeSessionProfile((await getMyInfo(result.cookie)).data?.profile);
+    if (!profile)
+      return privateJson(c, { error: "NetEase profile unavailable" }, 502);
+
+    const session = await createNeteaseSession(c.env, result.cookie, profile);
+    c.header(
+      "Set-Cookie",
+      serializeSessionCookie(session.token, session.maxAge)
+    );
+    return privateJson(c, { authenticated: true, profile });
+  } catch {
+    return upstreamFailure(c);
   }
 });
 

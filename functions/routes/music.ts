@@ -217,6 +217,20 @@ interface RequestBodyInspection {
   parsedBody?: unknown;
 }
 
+function isCellphoneLoginPayload(pathname: string, value: unknown): boolean {
+  if (pathname !== "/netease/login/cellphone") return false;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const body = value as Record<string, unknown>;
+  return (
+    Object.keys(body).length === 2 &&
+    typeof body.phone === "string" &&
+    /^1\d{10}$/.test(body.phone) &&
+    typeof body.password === "string" &&
+    body.password.length >= 1 &&
+    body.password.length <= 256
+  );
+}
+
 async function readBoundedRequestText(
   request: Request
 ): Promise<string | null> {
@@ -322,7 +336,10 @@ musicRoutes.use("*", async (c, next) => {
   }
 
   const bodyInspection = await inspectRequestBody(c.req.raw);
-  if (bodyInspection.containsSensitiveData) {
+  if (
+    bodyInspection.containsSensitiveData &&
+    !isCellphoneLoginPayload(url.pathname, bodyInspection.parsedBody)
+  ) {
     return rejectSensitiveRequest(c);
   }
 
