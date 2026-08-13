@@ -393,6 +393,10 @@ describe("NetEase session routes", () => {
   it("recursively redacts credentials from non-capability responses", async () => {
     const env = createEnv();
     api.getPlaylistDetail.mockResolvedValue({
+      id: 1,
+      name: "Sanitized playlist",
+      trackCount: 0,
+      tracks: [],
       message: "internal upstream detail at https://secret.example",
       data: {
         nested: {
@@ -417,11 +421,63 @@ describe("NetEase session routes", () => {
     const text = await response.text();
 
     expect(response.status).toBe(200);
-    expect(text).toContain("[redacted]");
-    expect(text).toContain("NetEase response received");
+    expect(text).toContain("Sanitized playlist");
     expect(text).not.toContain("secret.example");
     expect(text).not.toContain("canary-response");
     expect(text.toLowerCase()).not.toContain("authorization");
+  });
+
+  it("whitelists playlist fields before the outer response scanner", async () => {
+    const env = createEnv();
+    api.getPlaylistDetail.mockResolvedValue({
+      id: 7,
+      name: "My playlist",
+      coverImgUrl: "https://example.com/cover.jpg?token=capability",
+      description: "Visible songs",
+      trackCount: 1,
+      playCount: 2,
+      signature: "must-not-leak",
+      creator: profile,
+      trackIds: [{ id: 1, token: "must-not-leak" }],
+      tracks: [
+        {
+          id: 1,
+          name: "Song",
+          ar: [{ id: 2, name: "Artist", signature: "must-not-leak" }],
+          al: {
+            id: 3,
+            name: "Album",
+            picUrl: "https://example.com/album.jpg?token=capability",
+          },
+          dt: 1000,
+          fee: 0,
+          st: 0,
+          token: "must-not-leak",
+        },
+      ],
+    });
+
+    const response = await neteaseRoutes.request(
+      "/playlist",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://music.example",
+          "Sec-Fetch-Site": "same-origin",
+        },
+        body: JSON.stringify({ playlistId: "7" }),
+      },
+      env
+    );
+    const payload = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(payload)).not.toContain("must-not-leak");
+    expect(payload.coverImgUrl).toBe("https://example.com/cover.jpg");
+    expect(payload.tracks).toEqual([
+      expect.objectContaining({ id: 1, name: "Song" }),
+    ]);
   });
 
   it("uses a fixed audio error instead of returning an exception message", async () => {
@@ -498,6 +554,7 @@ describe("NetEase session routes", () => {
     const env = createEnv();
     api.getPlaylistDetail.mockResolvedValue({
       id: 7,
+      name: "Rate limited playlist",
       trackIds: [],
       tracks: [],
     });
@@ -551,6 +608,7 @@ describe("NetEase session routes", () => {
     const env = createEnv();
     api.getPlaylistDetail.mockResolvedValue({
       id: 7,
+      name: "Rate limited playlist",
       trackIds: [],
       tracks: [],
     });

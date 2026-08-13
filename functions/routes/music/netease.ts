@@ -64,6 +64,8 @@ export const neteaseRoutes = new Hono<{ Bindings: Env }>();
 
 type NeteaseContext = Context<{ Bindings: Env }>;
 
+type NeteaseRecord = Record<string, unknown>;
+
 const PRIVATE_CACHE_CONTROL = "private, no-store, max-age=0";
 const SAFE_UPSTREAM_ERROR = "NetEase upstream failed";
 const SAFE_AUDIO_UPSTREAM_ERROR = "NetEase audio upstream failed";
@@ -173,6 +175,97 @@ function normalizeSessionProfile(value: unknown): {
   const avatarUrl = normalizePersistableResourceUrl(profile.avatarUrl);
   if (profile.avatarUrl.trim() && !avatarUrl) return null;
   return { userId: profile.userId, nickname: profile.nickname, avatarUrl };
+}
+
+function safeNeteaseEntity(value: unknown): NeteaseRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as NeteaseRecord;
+  const id = record.id;
+  const name = record.name;
+  if (
+    (typeof id !== "number" && typeof id !== "string") ||
+    typeof name !== "string"
+  ) {
+    return null;
+  }
+  return { id, name };
+}
+
+function sanitizePlaylistDetailForClient(value: unknown): NeteaseRecord | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const playlist = value as NeteaseRecord;
+  const id = playlist.id;
+  const name = playlist.name;
+  const tracks = playlist.tracks;
+  if (
+    (typeof id !== "number" && typeof id !== "string") ||
+    typeof name !== "string" ||
+    !Array.isArray(tracks)
+  ) {
+    return null;
+  }
+
+  const safeTracks = tracks.map((value) => {
+    const song = value as NeteaseRecord;
+    const entity = safeNeteaseEntity(song);
+    const artists = Array.isArray(song.ar)
+      ? song.ar.map(safeNeteaseEntity).filter((item) => item !== null)
+      : [];
+    const album = safeNeteaseEntity(song.al);
+    if (!entity || !album) return null;
+
+    const result: NeteaseRecord = {
+      ...entity,
+      ar: artists,
+      al: {
+        ...album,
+        picUrl: normalizePersistableResourceUrl(
+          typeof (song.al as NeteaseRecord).picUrl === "string"
+            ? ((song.al as NeteaseRecord).picUrl as string)
+            : undefined
+        ),
+      },
+      dt: song.dt,
+      fee: song.fee,
+      st: song.st,
+    };
+    if (song.privilege && typeof song.privilege === "object") {
+      const privilege = song.privilege as NeteaseRecord;
+      result.privilege = {
+        id: privilege.id,
+        fee: privilege.fee,
+        payed: privilege.payed,
+        st: privilege.st,
+        pl: privilege.pl,
+        maxbr: privilege.maxbr,
+        plLevel: privilege.plLevel,
+        freeTrialPrivilege: {},
+      };
+    }
+    return result;
+  });
+  if (safeTracks.some((track) => track === null)) return null;
+
+  const creator = normalizeSessionProfile(playlist.creator);
+  return {
+    id,
+    name,
+    coverImgUrl: normalizePersistableResourceUrl(
+      typeof playlist.coverImgUrl === "string"
+        ? playlist.coverImgUrl
+        : undefined
+    ),
+    description:
+      typeof playlist.description === "string" ? playlist.description : "",
+    trackCount:
+      typeof playlist.trackCount === "number"
+        ? playlist.trackCount
+        : safeTracks.length,
+    playCount: typeof playlist.playCount === "number" ? playlist.playCount : 0,
+    tracks: safeTracks,
+    trackIds: safeTracks.map((track) => ({ id: track!.id })),
+    creator: creator ?? undefined,
+  };
 }
 
 function stripClientCredentialFields(
@@ -550,7 +643,9 @@ neteaseRoutes.post("/playlist", async (c) => {
   const session = await currentSession(c);
   try {
     const res = await getPlaylistDetail(playlistId, session?.credential || "");
-    return c.json(res);
+    const safeDetail = sanitizePlaylistDetailForClient(res);
+    if (!safeDetail) return upstreamFailure(c);
+    return privateJson(c, safeDetail);
   } catch {
     return upstreamFailure(c);
   }
