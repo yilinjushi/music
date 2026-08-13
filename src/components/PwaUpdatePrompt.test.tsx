@@ -62,6 +62,15 @@ describe("PwaUpdatePrompt", () => {
   it("waits for an explicit user action before applying an update", async () => {
     renderPrompt();
 
+    const prompt = container.querySelector(
+      '[aria-label="播放器更新"]'
+    ) as HTMLElement;
+    expect(prompt.className).toContain("pointer-events-auto");
+    expect(prompt.className).toContain(
+      "bottom-[calc(var(--safe-area-bottom)+12px)]"
+    );
+    expect(prompt.className).not.toContain("--bottom-stack-height");
+
     const updateButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("更新")
     );
@@ -73,6 +82,18 @@ describe("PwaUpdatePrompt", () => {
       await Promise.resolve();
     });
     expect(pwaMocks.updateServiceWorker).toHaveBeenCalledWith(true);
+  });
+
+  it("lets the user dismiss the update prompt", () => {
+    renderPrompt();
+
+    const dismissButton = container.querySelector(
+      'button[aria-label="稍后更新"]'
+    ) as HTMLButtonElement;
+    expect(dismissButton.className).toContain("pointer-events-auto");
+
+    act(() => dismissButton.click());
+    expect(pwaMocks.setNeedRefresh).toHaveBeenCalledWith(false);
   });
 
   it("messages the root waiting worker directly before falling back", async () => {

@@ -78,7 +78,7 @@ export function PwaUpdatePrompt() {
     <section
       aria-live="polite"
       aria-label="播放器更新"
-      className="fixed inset-x-3 z-[100] mx-auto max-w-md rounded-2xl border bg-background/95 p-3 shadow-xl backdrop-blur bottom-[calc(var(--bottom-stack-height)+var(--safe-area-bottom)+12px)]"
+      className="pointer-events-auto fixed inset-x-3 bottom-[calc(var(--safe-area-bottom)+12px)] z-[100] mx-auto max-w-md rounded-2xl border bg-background/95 p-3 shadow-xl backdrop-blur"
     >
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
@@ -91,7 +91,7 @@ export function PwaUpdatePrompt() {
         </div>
         <button
           type="button"
-          className="touch-target inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+          className="pointer-events-auto touch-target inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
           disabled={playbackActive || isApplying}
           onClick={() => void applyUpdate()}
         >
@@ -101,7 +101,7 @@ export function PwaUpdatePrompt() {
         <button
           type="button"
           aria-label="稍后更新"
-          className="touch-target inline-flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted"
+          className="pointer-events-auto touch-target inline-flex items-center justify-center rounded-xl text-muted-foreground hover:bg-muted"
           onClick={() => setNeedRefresh(false)}
         >
           <X aria-hidden="true" className="h-5 w-5" />
