@@ -27,12 +27,18 @@ import { proxyPrivateAudio } from "../proxy/audio";
 
 export const NETEASE_PLAYLIST_MAX_TRACKS = 500;
 export const NETEASE_PLAYLIST_TRACK_BATCH_SIZE = 100;
-export const NETEASE_PLAYLIST_MAX_REQUESTS =
+const NETEASE_PLAYLIST_BASE_REQUESTS =
   1 +
   Math.ceil(NETEASE_PLAYLIST_MAX_TRACKS / NETEASE_PLAYLIST_TRACK_BATCH_SIZE);
-export const NETEASE_PLAYLIST_WALL_CLOCK_MS = 10_000;
+// Doubled so one retry per request (detail + each track batch) still fits
+// inside the budget when a large playlist hits a transient upstream error.
+export const NETEASE_PLAYLIST_MAX_REQUESTS = NETEASE_PLAYLIST_BASE_REQUESTS * 2;
+// Mirrors the client's extended PLAYLIST_DETAIL_TIMEOUT_MS (30s) minus a
+// margin for response transit/parsing, so large mobile playlists (300+
+// tracks) actually get the time the client is already willing to wait.
+export const NETEASE_PLAYLIST_WALL_CLOCK_MS = 25_000;
 
-const NETEASE_PLAYLIST_REQUEST_DEADLINE_MS = 4_000;
+const NETEASE_PLAYLIST_REQUEST_DEADLINE_MS = 9_000;
 const NETEASE_PLAYLIST_ID = /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
 
 interface PlaylistUpstreamBudget {
@@ -90,6 +96,22 @@ async function requestPlaylistWeapi<T>(
       deadlineMs: Math.min(remainingMs, NETEASE_PLAYLIST_REQUEST_DEADLINE_MS),
     }
   );
+}
+
+// A single flaky/slow request should not fail an entire large playlist:
+// retry once (budget permitting) before giving up on it.
+async function requestPlaylistWeapiWithRetry<T>(
+  budget: PlaylistUpstreamBudget,
+  url: string,
+  data: Record<string, unknown>,
+  cookie: string
+): Promise<T> {
+  try {
+    return await requestPlaylistWeapi<T>(budget, url, data, cookie);
+  } catch (error) {
+    if (budget.deadline - Date.now() <= 0) throw error;
+    return await requestPlaylistWeapi<T>(budget, url, data, cookie);
+  }
 }
 
 /* =========================================================
@@ -214,7 +236,7 @@ export async function getPlaylistDetail(
     n: NETEASE_PLAYLIST_MAX_TRACKS,
     csrf_token: "",
   };
-  const res = await requestPlaylistWeapi<{
+  const res = await requestPlaylistWeapiWithRetry<{
     playlist?: Record<string, unknown>;
   }>(budget, `${BASE_URL}/weapi/v3/playlist/detail`, data, cookie);
 
@@ -269,12 +291,9 @@ async function getPlaylistTracksDetail(
     batches.map(async (batch) => {
       const c = `[${batch.map((id) => `{"id":${id}}`).join(",")}]`;
       const ids = `[${batch.join(",")}]`;
-      const response = await requestPlaylistWeapi<{ songs?: SongDetail[] }>(
-        budget,
-        url,
-        { c, ids },
-        cookie
-      );
+      const response = await requestPlaylistWeapiWithRetry<{
+        songs?: SongDetail[];
+      }>(budget, url, { c, ids }, cookie);
       if (!Array.isArray(response.songs)) {
         throw new Error("Invalid NetEase song detail response");
       }
