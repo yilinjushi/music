@@ -112,7 +112,7 @@ function buildBackupPayload(
     bilibiliKeepOriginalMeta: settings.bilibiliKeepOriginalMeta ?? false,
     bilibiliAutoMatchSuffix: settings.bilibiliAutoMatchSuffix ?? "高音质 原曲",
     fullScreenBackgroundMode: settings.fullScreenBackgroundMode ?? "theme",
-    showSourceBadge: settings.showSourceBadge ?? true,
+    showSourceBadge: settings.showSourceBadge ?? false,
     downloadQuality: settings.downloadQuality ?? "320",
     embedCover: settings.embedCover ?? true,
     embedLyric: settings.embedLyric ?? true,

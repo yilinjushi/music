@@ -201,4 +201,21 @@ describe("RootLayout", () => {
     expect(drawerClose).toHaveBeenCalledTimes(1);
     expect(useExitLayerStore.getState().stack).toHaveLength(0);
   });
+
+  it("loads the audio runtime only after a current track exists", async () => {
+    useMusicStore.setState({ queue: [], currentIndex: 0 });
+    renderLayout(["/search"]);
+
+    await vi.dynamicImportSettled();
+    await act(async () => {});
+    expect(container?.textContent).not.toContain("Global Player");
+
+    await act(async () => {
+      useMusicStore.setState({ queue: [track], currentIndex: 0 });
+    });
+    await vi.dynamicImportSettled();
+    await act(async () => {});
+
+    expect(container?.textContent).toContain("Global Player");
+  });
 });

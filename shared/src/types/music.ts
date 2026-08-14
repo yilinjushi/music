@@ -31,8 +31,8 @@ export interface SearchPageResult<T = MusicTrack> {
 export const searchOptions: Record<string, string> = {
   all: "聚合搜索",
   joox: "Joox",
-  netease: "网易云音乐",
-  _netease: "Netease",
+  netease: "网易云(备用)",
+  _netease: "网易云(官方)",
   kuwo: "酷我音乐",
   migu: "Migu",
   bilibili: "B站",
@@ -43,8 +43,8 @@ export const searchOptions: Record<string, string> = {
 
 export const sourceLabels: Record<string, string> = {
   joox: "Joox",
-  netease: "网易",
-  _netease: "Netease",
+  netease: "网易云(备用)",
+  _netease: "网易云(官方)",
   kuwo: "酷我",
   migu: "Migu",
   bilibili: "B站",
@@ -66,10 +66,14 @@ export const aggregatedSourceOptions: {
   },
   {
     value: "netease",
-    label: "网易云音乐",
+    label: "网易云(备用)",
     description: "音源稳定，小众资源多（GD Studio）",
   },
-  { value: "_netease", label: "Netease", description: "网易云官方，稳定高速" },
+  {
+    value: "_netease",
+    label: "网易云(官方)",
+    description: "网易云官方，稳定高速",
+  },
   {
     value: "kuwo",
     label: "酷我音乐",

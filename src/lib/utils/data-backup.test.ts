@@ -147,6 +147,7 @@ describe("data-backup sensitive ingress", () => {
     expect(result.data.sourceConfigs).toEqual([
       { source: "netease", enabled: true, visible: true },
     ]);
+    expect(result.data.showSourceBadge).toBe(false);
     expect(JSON.stringify(result.data)).not.toContain("unknownNestedField");
   });
 

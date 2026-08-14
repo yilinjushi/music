@@ -142,6 +142,21 @@ function destroy(value) {
   rmSync(value.browserRoot, { recursive: true, force: true });
 }
 
+test("slow playlist coverage is baseline-only evidence", () => {
+  const testName = "a slow 362-track NetEase playlist loads on mobile";
+  assert.equal(PLAYWRIGHT_BASELINE_TESTS.includes(testName), true);
+  assert.equal(
+    PLAYWRIGHT_REQUIRED_TESTS.filter((name) => name === testName).length,
+    1
+  );
+  assert.deepEqual(PLAYWRIGHT_EXPECTED_TOTALS, {
+    tests: 60,
+    executed: 30,
+    passed: 30,
+    skipped: 30,
+  });
+});
+
 test("verifier cross-binds exact JUnit, browser context, candidate, and dist", () => {
   const value = fixture();
   const { root } = value;

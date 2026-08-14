@@ -4,6 +4,7 @@ import {
   getRandomDomesticIp,
   BASE_URL,
   PC_USER_AGENT,
+  UpstreamDeadlineError,
   fetchUpstreamWithDeadline,
   weapi,
 } from "@otter-music/shared";
@@ -27,17 +28,40 @@ import { proxyPrivateAudio } from "../proxy/audio";
 
 export const NETEASE_PLAYLIST_MAX_TRACKS = 500;
 export const NETEASE_PLAYLIST_TRACK_BATCH_SIZE = 100;
-export const NETEASE_PLAYLIST_MAX_REQUESTS =
+const NETEASE_PLAYLIST_BASE_REQUESTS =
   1 +
   Math.ceil(NETEASE_PLAYLIST_MAX_TRACKS / NETEASE_PLAYLIST_TRACK_BATCH_SIZE);
-export const NETEASE_PLAYLIST_WALL_CLOCK_MS = 10_000;
+// Doubled so one retry per request (detail + each track batch) still fits
+// inside the budget when a large playlist hits a transient upstream error.
+export const NETEASE_PLAYLIST_MAX_REQUESTS = NETEASE_PLAYLIST_BASE_REQUESTS * 2;
+// Mirrors the client's extended PLAYLIST_DETAIL_TIMEOUT_MS (30s) minus a
+// margin for response transit/parsing, so large mobile playlists (300+
+// tracks) actually get the time the client is already willing to wait.
+export const NETEASE_PLAYLIST_WALL_CLOCK_MS = 25_000;
 
-const NETEASE_PLAYLIST_REQUEST_DEADLINE_MS = 4_000;
+const NETEASE_PLAYLIST_REQUEST_DEADLINE_MS = 9_000;
 const NETEASE_PLAYLIST_ID = /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
 
 interface PlaylistUpstreamBudget {
   deadline: number;
   requests: number;
+}
+
+class NetEasePlaylistHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`NetEase WEAPI error: ${status}`);
+    this.name = "NetEasePlaylistHttpError";
+  }
+}
+
+function isRetryablePlaylistRequestError(error: unknown): boolean {
+  if (error instanceof UpstreamDeadlineError) return true;
+  // Fetch network failures surface as TypeError in the Workers runtime.
+  if (error instanceof TypeError) return true;
+  return (
+    error instanceof NetEasePlaylistHttpError &&
+    (error.status === 408 || error.status >= 500)
+  );
 }
 
 function createPlaylistUpstreamBudget(): PlaylistUpstreamBudget {
@@ -81,7 +105,7 @@ async function requestPlaylistWeapi<T>(
     },
     async (response) => {
       if (!response.ok) {
-        throw new Error(`NetEase WEAPI error: ${response.status}`);
+        throw new NetEasePlaylistHttpError(response.status);
       }
       return (await response.json()) as T;
     },
@@ -90,6 +114,28 @@ async function requestPlaylistWeapi<T>(
       deadlineMs: Math.min(remainingMs, NETEASE_PLAYLIST_REQUEST_DEADLINE_MS),
     }
   );
+}
+
+// Retry one transient network/deadline/server failure (budget permitting).
+// Client errors, malformed JSON, body-limit failures, and validation errors
+// fail immediately instead of amplifying a deterministic upstream failure.
+async function requestPlaylistWeapiWithRetry<T>(
+  budget: PlaylistUpstreamBudget,
+  url: string,
+  data: Record<string, unknown>,
+  cookie: string
+): Promise<T> {
+  try {
+    return await requestPlaylistWeapi<T>(budget, url, data, cookie);
+  } catch (error) {
+    if (
+      !isRetryablePlaylistRequestError(error) ||
+      budget.deadline - Date.now() <= 0
+    ) {
+      throw error;
+    }
+    return await requestPlaylistWeapi<T>(budget, url, data, cookie);
+  }
 }
 
 /* =========================================================
@@ -214,7 +260,7 @@ export async function getPlaylistDetail(
     n: NETEASE_PLAYLIST_MAX_TRACKS,
     csrf_token: "",
   };
-  const res = await requestPlaylistWeapi<{
+  const res = await requestPlaylistWeapiWithRetry<{
     playlist?: Record<string, unknown>;
   }>(budget, `${BASE_URL}/weapi/v3/playlist/detail`, data, cookie);
 
@@ -269,12 +315,9 @@ async function getPlaylistTracksDetail(
     batches.map(async (batch) => {
       const c = `[${batch.map((id) => `{"id":${id}}`).join(",")}]`;
       const ids = `[${batch.join(",")}]`;
-      const response = await requestPlaylistWeapi<{ songs?: SongDetail[] }>(
-        budget,
-        url,
-        { c, ids },
-        cookie
-      );
+      const response = await requestPlaylistWeapiWithRetry<{
+        songs?: SongDetail[];
+      }>(budget, url, { c, ids }, cookie);
       if (!Array.isArray(response.songs)) {
         throw new Error("Invalid NetEase song detail response");
       }

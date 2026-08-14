@@ -15,6 +15,26 @@ const FullScreenPlayer = lazy(() =>
   }))
 );
 
+const GlobalMusicPlayer = lazy(() =>
+  import("@/components/GlobalMusicPlayer").then((module) => ({
+    default: module.GlobalMusicPlayer,
+  }))
+);
+
+export function PlayerAudioHost() {
+  const hasCurrentTrack = useMusicStore((state) =>
+    Boolean(state.queue[state.currentIndex])
+  );
+
+  if (!hasCurrentTrack) return null;
+
+  return (
+    <Suspense fallback={null}>
+      <GlobalMusicPlayer />
+    </Suspense>
+  );
+}
+
 export function PlayerBarHost({ isTab }: { isTab: boolean }) {
   const { hasCurrentTrack, isFullScreenPlayer, setIsFullScreenPlayer } =
     useMusicStore(

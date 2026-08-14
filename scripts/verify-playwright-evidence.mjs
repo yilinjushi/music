@@ -26,6 +26,7 @@ export const PLAYWRIGHT_ALL_PROJECT_TESTS = [
   "keyboard focus reaches the primary navigation",
 ];
 export const PLAYWRIGHT_BASELINE_TESTS = [
+  "a slow 362-track NetEase playlist loads on mobile",
   "200% browser zoom keeps primary controls usable",
   "simulated server session safely restores the browser account view",
   "a simulated 401 expires persisted UI state without exposing credentials",
