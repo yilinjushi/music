@@ -1,7 +1,6 @@
 import { Outlet, useLocation } from "react-router-dom";
 import { MusicLayout } from "@/components/MusicLayout";
 import { MusicTabBar } from "@/components/MusicTabBar";
-import { GlobalMusicPlayer } from "@/components/GlobalMusicPlayer";
 import { useExitLayer } from "@/hooks/useExitLayer";
 import { useEffect, lazy, Suspense } from "react";
 
@@ -14,6 +13,12 @@ const PlayerBarHost = lazy(() =>
 const PlayerRuntimeHost = lazy(() =>
   import("@/components/PlayerHosts").then((module) => ({
     default: module.PlayerRuntimeHost,
+  }))
+);
+
+const PlayerAudioHost = lazy(() =>
+  import("@/components/PlayerHosts").then((module) => ({
+    default: module.PlayerAudioHost,
   }))
 );
 
@@ -56,7 +61,9 @@ export function RootLayout() {
         <Outlet />
       </MusicLayout>
 
-      <GlobalMusicPlayer />
+      <Suspense fallback={null}>
+        <PlayerAudioHost />
+      </Suspense>
 
       <Suspense fallback={null}>
         <PlayerRuntimeHost />
