@@ -4,6 +4,7 @@ import {
   getRandomDomesticIp,
   BASE_URL,
   PC_USER_AGENT,
+  UpstreamDeadlineError,
   fetchUpstreamWithDeadline,
   weapi,
 } from "@otter-music/shared";
@@ -44,6 +45,23 @@ const NETEASE_PLAYLIST_ID = /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
 interface PlaylistUpstreamBudget {
   deadline: number;
   requests: number;
+}
+
+class NetEasePlaylistHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`NetEase WEAPI error: ${status}`);
+    this.name = "NetEasePlaylistHttpError";
+  }
+}
+
+function isRetryablePlaylistRequestError(error: unknown): boolean {
+  if (error instanceof UpstreamDeadlineError) return true;
+  // Fetch network failures surface as TypeError in the Workers runtime.
+  if (error instanceof TypeError) return true;
+  return (
+    error instanceof NetEasePlaylistHttpError &&
+    (error.status === 408 || error.status >= 500)
+  );
 }
 
 function createPlaylistUpstreamBudget(): PlaylistUpstreamBudget {
@@ -87,7 +105,7 @@ async function requestPlaylistWeapi<T>(
     },
     async (response) => {
       if (!response.ok) {
-        throw new Error(`NetEase WEAPI error: ${response.status}`);
+        throw new NetEasePlaylistHttpError(response.status);
       }
       return (await response.json()) as T;
     },
@@ -98,8 +116,9 @@ async function requestPlaylistWeapi<T>(
   );
 }
 
-// A single flaky/slow request should not fail an entire large playlist:
-// retry once (budget permitting) before giving up on it.
+// Retry one transient network/deadline/server failure (budget permitting).
+// Client errors, malformed JSON, body-limit failures, and validation errors
+// fail immediately instead of amplifying a deterministic upstream failure.
 async function requestPlaylistWeapiWithRetry<T>(
   budget: PlaylistUpstreamBudget,
   url: string,
@@ -109,7 +128,12 @@ async function requestPlaylistWeapiWithRetry<T>(
   try {
     return await requestPlaylistWeapi<T>(budget, url, data, cookie);
   } catch (error) {
-    if (budget.deadline - Date.now() <= 0) throw error;
+    if (
+      !isRetryablePlaylistRequestError(error) ||
+      budget.deadline - Date.now() <= 0
+    ) {
+      throw error;
+    }
     return await requestPlaylistWeapi<T>(budget, url, data, cookie);
   }
 }

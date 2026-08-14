@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, relative as pathRelative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,7 +23,7 @@ const report = JSON.parse(run.stdout);
 const current = {};
 const errors = [];
 for (const file of report) {
-  const relative = file.filePath.replace(`${root}/`, "");
+  const relative = pathRelative(root, file.filePath).replaceAll("\\", "/");
   for (const message of file.messages) {
     if (message.severity === 2) {
       errors.push(

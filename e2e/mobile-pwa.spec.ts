@@ -593,9 +593,12 @@ test("search uses a deterministic same-origin NetEase fixture", async ({
   await input.fill("测试歌曲");
   await input.press("Enter");
   await expect(page.getByText("E2E 搜索结果", { exact: true })).toBeVisible();
-  await expect(
-    page.getByText("测试歌手 • 测试专辑", { exact: true }).first()
-  ).toBeVisible();
+  const resultTrack = page.getByRole("button", {
+    name: "播放：E2E 搜索结果",
+    exact: true,
+  });
+  await expect(resultTrack).toContainText("网易云(官方)");
+  await expect(resultTrack).toContainText("测试歌手 • 测试专辑");
 });
 
 test("a slow 362-track NetEase playlist loads on mobile", async ({
@@ -636,7 +639,12 @@ test("a slow 362-track NetEase playlist loads on mobile", async ({
     page.getByRole("heading", { name: "我喜欢的音乐", exact: true }).first()
   ).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText("362 首", { exact: true })).toBeVisible();
-  await expect(page.getByText("长歌单曲目 1", { exact: true })).toBeVisible();
+  const firstTrack = page.getByRole("button", {
+    name: "播放：长歌单曲目 1",
+    exact: true,
+  });
+  await expect(firstTrack).toBeVisible();
+  await expect(firstTrack).not.toContainText("网易云(官方)");
   await expect(page.getByText("加载失败", { exact: true })).toHaveCount(0);
 });
 

@@ -78,7 +78,7 @@ export function PwaUpdatePrompt() {
     <section
       aria-live="polite"
       aria-label="播放器更新"
-      className="pointer-events-auto fixed inset-x-3 bottom-[calc(var(--safe-area-bottom)+12px)] z-[100] mx-auto max-w-md rounded-2xl border bg-background/95 p-3 shadow-xl backdrop-blur"
+      className="pointer-events-auto fixed inset-x-3 bottom-[calc(var(--bottom-stack-height)+12px)] z-40 mx-auto max-w-md rounded-2xl border bg-background/95 p-3 shadow-xl backdrop-blur"
     >
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">

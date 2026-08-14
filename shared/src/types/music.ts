@@ -43,8 +43,8 @@ export const searchOptions: Record<string, string> = {
 
 export const sourceLabels: Record<string, string> = {
   joox: "Joox",
-  netease: "网易",
-  _netease: "网易",
+  netease: "网易云(备用)",
+  _netease: "网易云(官方)",
   kuwo: "酷我",
   migu: "Migu",
   bilibili: "B站",

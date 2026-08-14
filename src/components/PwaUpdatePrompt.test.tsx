@@ -67,9 +67,10 @@ describe("PwaUpdatePrompt", () => {
     ) as HTMLElement;
     expect(prompt.className).toContain("pointer-events-auto");
     expect(prompt.className).toContain(
-      "bottom-[calc(var(--safe-area-bottom)+12px)]"
+      "bottom-[calc(var(--bottom-stack-height)+12px)]"
     );
-    expect(prompt.className).not.toContain("--bottom-stack-height");
+    expect(prompt.className).toContain("z-40");
+    expect(prompt.className).not.toContain("z-[100]");
 
     const updateButton = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent?.includes("更新")

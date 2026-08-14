@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getPlaylistDetail,
+  NETEASE_PLAYLIST_MAX_REQUESTS,
   NETEASE_PLAYLIST_MAX_TRACKS,
   NETEASE_PLAYLIST_TRACK_BATCH_SIZE,
+  NETEASE_PLAYLIST_WALL_CLOCK_MS,
 } from "./netease-api";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -17,6 +20,118 @@ describe("server NetEase playlist budget", () => {
       TypeError
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("retries one transient server failure and then succeeds", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("temporary", { status: 503 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ playlist: { id: 7, trackIds: [{ id: 1 }] } }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ songs: [{ id: 1, name: "Recovered" }] }),
+          {
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      );
+
+    const detail = await getPlaylistDetail("7", "");
+
+    expect(detail.tracks).toEqual([{ id: 1, name: "Recovered" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries one transient network failure and then succeeds", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new TypeError("fetch failed"))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ playlist: { id: 7, trackIds: [{ id: 1 }] } }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ songs: [{ id: 1, name: "Recovered" }] }),
+          {
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      );
+
+    await expect(getPlaylistDetail("7", "")).resolves.toMatchObject({
+      tracks: [{ id: 1, name: "Recovered" }],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries a transient failure only once", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async () => new Response("temporary", { status: 503 })
+      );
+
+    await expect(getPlaylistDetail("7", "")).rejects.toThrow(/503/);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry deterministic client errors", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => new Response("denied", { status: 401 }));
+
+    await expect(getPlaylistDetail("7", "")).rejects.toThrow(/401/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not retry malformed successful responses", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response("{", {
+          headers: { "Content-Type": "application/json" },
+        })
+    );
+
+    await expect(getPlaylistDetail("7", "")).rejects.toBeInstanceOf(
+      SyntaxError
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps retries inside the shared request and wall-clock budgets", async () => {
+    vi.useFakeTimers();
+    const trackIds = Array.from(
+      { length: NETEASE_PLAYLIST_MAX_TRACKS },
+      (_, index) => ({ id: index + 1 })
+    );
+    let call = 0;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => {
+        call += 1;
+        if (call === 2) {
+          return new Response(
+            JSON.stringify({ playlist: { id: 7, trackIds } }),
+            { headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Promise<Response>(() => undefined);
+      });
+
+    const request = getPlaylistDetail("7", "");
+    const rejection = expect(request).rejects.toThrow(/deadline|budget/i);
+
+    await vi.advanceTimersByTimeAsync(NETEASE_PLAYLIST_WALL_CLOCK_MS + 1);
+    await rejection;
+    expect(fetchMock).toHaveBeenCalledTimes(NETEASE_PLAYLIST_MAX_REQUESTS);
   });
 
   it("rejects oversized trackIds after only the detail request", async () => {
@@ -127,8 +242,7 @@ describe("server NetEase playlist budget", () => {
     let pendingBatches = 0;
     let maxPendingBatches = 0;
     let batchCall = 0;
-    vi
-      .spyOn(globalThis, "fetch")
+    vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ playlist: { id: 7, trackIds } }), {
           headers: { "Content-Type": "application/json" },

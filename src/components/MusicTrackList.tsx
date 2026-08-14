@@ -185,12 +185,14 @@ export function MusicTrackList({
     addBatchToFavorites,
     addBatchToNextPlay,
     showSourceBadge: storeShowBadge,
+    autoMatchTrackKey,
   } = useMusicStore(
     useShallow((state) => ({
       quality: state.quality,
       addBatchToFavorites: state.addBatchToFavorites,
       addBatchToNextPlay: state.addBatchToNextPlay,
       showSourceBadge: state.showSourceBadge,
+      autoMatchTrackKey: state.autoMatchContext?.trackKey ?? null,
     }))
   );
 
@@ -461,7 +463,10 @@ export function MusicTrackList({
                   confirmRemove={confirmRemove}
                   quality={quality}
                   showSourceBadge={
-                    isSelectionMode || storeShowBadge || showSourceBadge
+                    isSelectionMode ||
+                    storeShowBadge ||
+                    showSourceBadge ||
+                    autoMatchTrackKey === getTrackIdentityKey(track)
                   }
                 />
               ) : (

@@ -5,7 +5,11 @@ import { MemoryRouter } from "react-router-dom";
 
 import { MusicSearchView } from "./MusicSearchView";
 import { useMusicStore } from "@/store/music-store";
-import type { MusicTrack, SearchSuggestionItem } from "@/types/music";
+import {
+  sourceLabels,
+  type MusicTrack,
+  type SearchSuggestionItem,
+} from "@/types/music";
 
 vi.mock("@/lib/storage-adapter", () => ({
   idbStorage: {
@@ -328,6 +332,8 @@ describe("MusicSearchView", () => {
       ["migu", "Migu"],
       ["qq", "QQ音乐"],
     ]);
+    expect(sourceLabels.netease).toBe("网易云(备用)");
+    expect(sourceLabels._netease).toBe("网易云(官方)");
 
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(
