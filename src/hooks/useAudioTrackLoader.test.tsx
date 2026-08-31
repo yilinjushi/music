@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MusicTrack } from "@/types/music";
 import { useMusicStore } from "@/store/music-store";
+import {
+  buildUrlCacheKey,
+  useUrlCacheStore,
+} from "@/store/url-cache-store";
 import { useAudioEventHandlers } from "./useAudioEventHandlers";
 import { useAudioTrackLoader } from "./useAudioTrackLoader";
 
@@ -87,6 +91,7 @@ describe("useAudioTrackLoader request ownership and recovery", () => {
       playbackSpeed: 1,
       urlRecoveryKey: 0,
     });
+    useUrlCacheStore.setState({ urlMap: {}, generation: 0 });
   });
 
   afterEach(() => {
@@ -191,6 +196,178 @@ describe("useAudioTrackLoader request ownership and recovery", () => {
     );
     expect(useMusicStore.getState().isPlaying).toBe(true);
     expect(audio.play).toHaveBeenCalledOnce();
+    cleanup();
+  });
+
+  it("starts a preloaded next track before readiness after the current track ends", async () => {
+    const trackA = makeTrack("ended-a");
+    const trackB = makeTrack("ended-b");
+    const urlA = "https://audio.test/ended-a.mp3";
+    const urlB = "https://audio.test/ended-b.mp3";
+    let releaseNextReadiness: (() => void) | undefined;
+
+    resolver.resolveTrackUrl.mockImplementation(async (track: MusicTrack) => ({
+      url: track.id === trackA.id ? urlA : urlB,
+    }));
+    useUrlCacheStore
+      .getState()
+      .set(
+        buildUrlCacheKey(trackB.source, trackB.id, trackB.url_id, "192"),
+        urlB
+      );
+    useMusicStore.setState({ queue: [trackA, trackB], currentIndex: 0 });
+
+    const { audio, cleanup } = setup((element) => {
+      if (element.src === urlB) {
+        releaseNextReadiness = () =>
+          element.dispatchEvent(new Event("canplay"));
+        return;
+      }
+      queueMicrotask(() => element.dispatchEvent(new Event("canplay")));
+    });
+
+    await vi.waitFor(() => expect(audio.play).toHaveBeenCalledOnce());
+    audio.pause();
+
+    await act(async () => {
+      audio.dispatchEvent(new Event("ended"));
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(useMusicStore.getState().currentIndex).toBe(1);
+      expect(audio.src).toBe(urlB);
+      expect(audio.play).toHaveBeenCalledTimes(2);
+    });
+    expect(releaseNextReadiness).toBeTypeOf("function");
+    expect(useMusicStore.getState().isLoading).toBe(true);
+    expect(
+      resolver.resolveTrackUrl.mock.calls.filter(
+        ([track]) => (track as MusicTrack).id === trackB.id
+      )
+    ).toHaveLength(0);
+
+    await act(async () => {
+      releaseNextReadiness?.();
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => {
+      expect(useMusicStore.getState().isLoading).toBe(false);
+      expect(audio.paused).toBe(false);
+    });
+    cleanup();
+  });
+
+  it("keeps the next track selected when autoplay policy blocks continuation", async () => {
+    const trackA = makeTrack("blocked-a");
+    const trackB = makeTrack("blocked-b");
+    const urlA = "https://audio.test/blocked-a.mp3";
+    const urlB = "https://audio.test/blocked-b.mp3";
+
+    resolver.resolveTrackUrl.mockImplementation(async (track: MusicTrack) => ({
+      url: track.id === trackA.id ? urlA : urlB,
+    }));
+    useUrlCacheStore
+      .getState()
+      .set(
+        buildUrlCacheKey(trackB.source, trackB.id, trackB.url_id, "192"),
+        urlB
+      );
+    useMusicStore.setState({ queue: [trackA, trackB], currentIndex: 0 });
+
+    const { audio, cleanup } = setup((element) => {
+      if (element.src === urlB) return;
+      queueMicrotask(() => element.dispatchEvent(new Event("canplay")));
+    });
+    await vi.waitFor(() => expect(audio.play).toHaveBeenCalledOnce());
+
+    audio.pause();
+    vi.mocked(audio.play).mockRejectedValueOnce(
+      new DOMException("Playback requires activation", "NotAllowedError")
+    );
+    await act(async () => {
+      audio.dispatchEvent(new Event("ended"));
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(useMusicStore.getState().isPlaying).toBe(false);
+      expect(useMusicStore.getState().isLoading).toBe(false);
+    });
+    expect(useMusicStore.getState().currentIndex).toBe(1);
+    expect(useMusicStore.getState().currentAudioUrl).toBe(urlB);
+    expect(useMusicStore.getState().urlRecoveryKey).toBe(0);
+    expect(useMusicStore.getState().consecutiveFailures).toBe(0);
+    expect(resolver.invalidateTrackUrlCache).not.toHaveBeenCalled();
+    expect(audioMatch.handleAutoMatch).not.toHaveBeenCalled();
+    expect(audio.dataset.terminalLoadFailure).toBeUndefined();
+    cleanup();
+  });
+
+  it("retries an interrupted early play when the user resumes before readiness", async () => {
+    const trackA = makeTrack("resume-a");
+    const trackB = makeTrack("resume-b");
+    const urlA = "https://audio.test/resume-a.mp3";
+    const urlB = "https://audio.test/resume-b.mp3";
+    let releaseNextReadiness: (() => void) | undefined;
+    let rejectEarlyPlay: ((reason?: unknown) => void) | undefined;
+
+    resolver.resolveTrackUrl.mockImplementation(async (track: MusicTrack) => ({
+      url: track.id === trackA.id ? urlA : urlB,
+    }));
+    useUrlCacheStore
+      .getState()
+      .set(
+        buildUrlCacheKey(trackB.source, trackB.id, trackB.url_id, "192"),
+        urlB
+      );
+    useMusicStore.setState({ queue: [trackA, trackB], currentIndex: 0 });
+
+    const { audio, cleanup } = setup((element) => {
+      if (element.src === urlB) {
+        releaseNextReadiness = () =>
+          element.dispatchEvent(new Event("canplay"));
+        return;
+      }
+      queueMicrotask(() => element.dispatchEvent(new Event("canplay")));
+    });
+    await vi.waitFor(() => expect(audio.play).toHaveBeenCalledOnce());
+
+    vi.mocked(audio.play).mockImplementationOnce(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectEarlyPlay = reject;
+        })
+    );
+    audio.pause();
+    await act(async () => {
+      audio.dispatchEvent(new Event("ended"));
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => {
+      expect(audio.play).toHaveBeenCalledTimes(2);
+      expect(rejectEarlyPlay).toBeTypeOf("function");
+      expect(releaseNextReadiness).toBeTypeOf("function");
+    });
+
+    await act(async () => {
+      useMusicStore.setState({ isPlaying: false });
+      audio.pause();
+      rejectEarlyPlay?.(new DOMException("Play interrupted", "AbortError"));
+      await Promise.resolve();
+      useMusicStore.setState({ isPlaying: true });
+      releaseNextReadiness?.();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(audio.play).toHaveBeenCalledTimes(3);
+      expect(audio.paused).toBe(false);
+      expect(useMusicStore.getState().isPlaying).toBe(true);
+      expect(useMusicStore.getState().isLoading).toBe(false);
+    });
+    expect(useMusicStore.getState().currentIndex).toBe(1);
+    expect(useMusicStore.getState().urlRecoveryKey).toBe(0);
     cleanup();
   });
 
@@ -371,7 +548,7 @@ describe("useAudioTrackLoader request ownership and recovery", () => {
     await vi.waitFor(() => {
       expect(useMusicStore.getState().isLoading).toBe(false);
     });
-    expect(audio.play).not.toHaveBeenCalled();
+    expect(audio.play).toHaveBeenCalledOnce();
     expect(audio.paused).toBe(true);
     expect(useMusicStore.getState().isPlaying).toBe(false);
     cleanup();
@@ -469,7 +646,7 @@ describe("useAudioTrackLoader request ownership and recovery", () => {
 
       await vi.waitFor(() => {
         expect(useMusicStore.getState().currentAudioUrl).toBe(newUrl);
-        expect(audio.play).toHaveBeenCalledOnce();
+        expect(audio.play).toHaveBeenCalledTimes(proxyEnabled ? 3 : 2);
       });
 
       const proxyLoads = sequence.filter((item) =>
@@ -571,7 +748,7 @@ describe("useAudioTrackLoader request ownership and recovery", () => {
     await vi.waitFor(() => {
       expect(useMusicStore.getState().queue[0]).toEqual(replacement);
       expect(audio.src).toBe(matchedUrl);
-      expect(audio.play).toHaveBeenCalledOnce();
+      expect(audio.play).toHaveBeenCalledTimes(2);
     });
 
     expect(audioMatch.handleAutoMatch).toHaveBeenCalledOnce();
@@ -595,7 +772,7 @@ describe("useAudioTrackLoader request ownership and recovery", () => {
     });
 
     await vi.waitFor(() => {
-      expect(audio.play).toHaveBeenCalledOnce();
+      expect(audio.play).toHaveBeenCalledTimes(2);
       expect(useMusicStore.getState().isLoading).toBe(false);
     });
 

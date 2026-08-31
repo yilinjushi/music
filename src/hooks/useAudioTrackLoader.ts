@@ -10,10 +10,31 @@ import {
   isSameTrackIdentity,
   normalizeTrackUrlId,
 } from "@/lib/utils/track-identity";
-import { isSameOriginOpaqueAudioUrl } from "@/lib/utils/audio-url";
+import {
+  isSameOriginOpaqueAudioUrl,
+  normalizeAudioUrlForPlayback,
+} from "@/lib/utils/audio-url";
 
 const AUDIO_READY_TIMEOUT = 8000;
 type FallbackStage = "none" | "proxy" | "final";
+
+function isPlaybackBlockedError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "NotAllowedError"
+  );
+}
+
+function isPlayInterruptionError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    error.name === "AbortError"
+  );
+}
 
 /** 校验歌曲在当前网络/缓存状态下是否可播 */
 function isTrackPlayable(
@@ -263,6 +284,9 @@ export function useAudioTrackLoader(
       const resumeTime = qualityChanged
         ? audio.currentTime
         : getState().currentAudioTime;
+      const cachedPrimaryUrl = !isRecovery
+        ? useUrlCacheStore.getState().get(trackKey)
+        : undefined;
       if (!qualityChanged) audio.pause();
 
       if (isRecovery) {
@@ -311,9 +335,16 @@ export function useAudioTrackLoader(
 
         // Install readiness listeners before load(): a synthetic media layer
         // or a very fast memory hit may emit loadedmetadata synchronously.
+        const readinessController = new AbortController();
+        const abortReadiness = () => readinessController.abort();
+        if (controller.signal.aborted) abortReadiness();
+        else
+          controller.signal.addEventListener("abort", abortReadiness, {
+            once: true,
+          });
         const readiness = waitForAudioReady(
           audio,
-          controller.signal,
+          readinessController.signal,
           AUDIO_READY_TIMEOUT,
           !shouldReload
         );
@@ -324,8 +355,32 @@ export function useAudioTrackLoader(
           // to the same URL; otherwise no readiness event is guaranteed.
           audio.load();
         }
+        const shouldStartBeforeReady =
+          resumeTime === 0 && getState().isPlaying;
+        if (shouldStartBeforeReady) {
+          audio.playbackRate = getState().playbackSpeed;
+        }
+        // Starting a fresh track before awaiting canplay keeps the browser's
+        // continuous media session alive across an ended -> next transition.
+        // Convert a user pause interruption into an outcome so a later resume
+        // can retry once media is ready. Other failures keep rejecting, and
+        // Promise.all below observes them immediately instead of letting a
+        // later readiness timeout hide the real play() error.
+        const earlyPlayAttempt = shouldStartBeforeReady
+          ? audio.play().then(
+              () => ({ interrupted: false as const }),
+              (error: unknown) => {
+                if (isPlayInterruptionError(error)) {
+                  return { interrupted: true as const };
+                }
+                throw error;
+              }
+            )
+          : null;
         try {
-          await readiness;
+          const earlyPlayOutcome = earlyPlayAttempt
+            ? (await Promise.all([readiness, earlyPlayAttempt]))[1]
+            : null;
           assertActive();
           readyMediaRef.current = {
             index: ownerIndex,
@@ -338,14 +393,32 @@ export function useAudioTrackLoader(
           // A user can pause while URL resolution or media readiness is still
           // pending. Do not let the completion of that older play request
           // silently turn playback back on after their explicit pause.
-          if (!getState().isPlaying) return;
+          if (!getState().isPlaying) {
+            if (!audio.paused) audio.pause();
+            return;
+          }
           audio.currentTime = resumeTime;
           audio.playbackRate = getState().playbackSpeed;
           assertActive();
           if (!getState().isPlaying) return;
-          await audio.play();
+          if (!earlyPlayAttempt || earlyPlayOutcome?.interrupted) {
+            await audio.play();
+          }
           assertActive();
+        } catch (error) {
+          // A readiness failure must stop the pending old source, but a stale
+          // request must never pause media already owned by a newer track.
+          if (
+            earlyPlayAttempt &&
+            isActive() &&
+            audio.src === absoluteAudioUrl
+          ) {
+            audio.pause();
+          }
+          throw error;
         } finally {
+          controller.signal.removeEventListener("abort", abortReadiness);
+          readinessController.abort();
           clearProxyMarker();
         }
       };
@@ -372,7 +445,13 @@ export function useAudioTrackLoader(
       };
 
       try {
-        const { url: primaryUrl } = await resolveOptimalUrl();
+        // useAudioPreloader warms this memory cache near the end of the
+        // current track. Consume it synchronously so the normal ended path can
+        // set src and request play before yielding to background throttling.
+        const primaryUrl = cachedPrimaryUrl
+          ? normalizeAudioUrlForPlayback(cachedPrimaryUrl)
+          : (await resolveOptimalUrl()).url;
+        if (cachedPrimaryUrl) remoteUrlRef.current = primaryUrl;
         assertActive();
 
         // 离线无资源容灾跳过
@@ -400,8 +479,7 @@ export function useAudioTrackLoader(
           assertActive();
         } catch (err) {
           assertActive();
-          if (err instanceof DOMException && err.name === "NotAllowedError")
-            throw err;
+          if (isPlaybackBlockedError(err)) throw err;
 
           // 代理备用线路容灾
           if (
@@ -427,6 +505,22 @@ export function useAudioTrackLoader(
       } catch (err: unknown) {
         if (!isActive() || (err instanceof Error && err.name === "AbortError"))
           return;
+
+        // Autoplay/user-activation policy is not an audio URL failure. Keep
+        // the selected next track and resolved src intact so one user play
+        // action can resume it; never poison source health or skip the queue.
+        if (isPlaybackBlockedError(err)) {
+          logger.warn(
+            "useAudioTrackLoader",
+            "Browser blocked automatic playback continuation",
+            { trackId, source }
+          );
+          if (audio.paused) getState().setIsPlaying(false);
+          toast.error("浏览器阻止了自动续播，请点击播放继续", {
+            id: "playback-policy-blocked",
+          });
+          return;
+        }
 
         const errorMsg = err instanceof Error ? err.message : String(err);
         logger.error(
