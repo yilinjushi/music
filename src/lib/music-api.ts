@@ -9,6 +9,7 @@ import type {
 } from "@/types/music";
 import { cachedFetch, deleteCachedValue } from "@/lib/utils/cache";
 import { searchSuggest } from "@/lib/netease/netease-api";
+import { lookupAudioCache } from "@/lib/vps-audio-cache";
 import { MusicProviderFactory, isAbort } from "./music-provider";
 import { logger } from "@/lib/logger";
 
@@ -141,6 +142,10 @@ export const musicApi = {
     signal?: AbortSignal
   ): Promise<string | null> {
     throwIfAborted(signal);
+
+    const cachedUrl = await lookupAudioCache(track, signal);
+    throwIfAborted(signal);
+    if (cachedUrl) return cachedUrl;
 
     // Resolved media URLs are frequently short-lived bearer capabilities.
     // Keep them out of Cache Storage entirely; audio-resolver owns the

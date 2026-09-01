@@ -63,9 +63,19 @@ than plaintext build variables:
 | `NETEASE_SESSION_HMAC_SECRET` | secret   | At least 32 random characters                                                     |
 | `NETEASE_CREDENTIAL_ENC_KEY`  | secret   | Independent key, at least 32 random characters and different from the HMAC secret |
 | `NETEASE_SESSION_TTL_SECONDS` | variable | Optional, 3600–7776000; default 2592000                                           |
+| `QINIU_ACCESS_KEY`            | secret   | Access key for the dedicated private `music-cache-overseas` bucket              |
+| `QINIU_SECRET_KEY`            | secret   | Secret key paired with `QINIU_ACCESS_KEY`                                       |
 
 The PWA edition does not need `GITHUB_TOKEN`; the upstream APK update endpoint
 is not mounted. Never use a `VITE_` prefix for any secret.
+
+The dedicated audio cache uses the private Qiniu bucket
+`music-cache-overseas` in the Singapore region (`as0`) and the DNS-only CDN
+domain `music-cache.80007001.xyz`. Keep the bucket separate from `gmp001`.
+The Qiniu access and secret keys are Pages secrets only; they must never be
+placed in `wrangler.jsonc`, the repository, or browser code. If the Qiniu
+configuration is missing or unavailable, the cache endpoints fail closed and
+normal provider URL resolution continues.
 
 `APP_ORIGIN` is mandatory at runtime and is parsed fail-closed. It must be the
 literal HTTPS origin (for example `https://music.example`, not a URL with a

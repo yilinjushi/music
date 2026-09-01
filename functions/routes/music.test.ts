@@ -19,6 +19,52 @@ afterEach(() => {
 });
 
 describe("music route credential boundary", () => {
+  it("uses the configured audio cache when an opaque track reference is present", async () => {
+    const cache = {
+      lookup: vi.fn().mockResolvedValue({
+        path: "/music-api/cache/audio?key=" + "a".repeat(64),
+        storedBr: 320,
+      }),
+      serve: vi.fn(),
+      startNeteasePlaylistJob: vi.fn(),
+      getJob: vi.fn(),
+    };
+    const response = await musicRoutes.request(
+      "https://music.example/cache/lookup",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "_netease", id: "123" }),
+      },
+      { AUDIO_CACHE: cache } as never
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      path: "/music-api/cache/audio?key=" + "a".repeat(64),
+      storedBr: 320,
+    });
+    expect(cache.lookup).toHaveBeenCalledWith({
+      source: "_netease",
+      id: "123",
+      urlId: undefined,
+    });
+  });
+
+  it("fails closed when the audio cache is unavailable", async () => {
+    const response = await musicRoutes.request(
+      "https://music.example/cache/lookup",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: "_netease", id: "123" }),
+      },
+      {} as never
+    );
+
+    expect(response.status).toBe(404);
+  });
+
   it("never reads or writes Cache Storage for a URL capability response", async () => {
     const cache = {
       match: vi.fn(),

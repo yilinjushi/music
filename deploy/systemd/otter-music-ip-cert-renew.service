@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew Otter Music short-lived IP certificate
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+ExecStart=/usr/local/bin/lego run --path /etc/lego --server https://acme-v02.api.letsencrypt.org/directory --accept-tos --domains 193.112.217.24 --profile shortlived --key-type ec256 --http --http.webroot /var/www/otter-music-acme --renew-days 3
+ExecStartPost=/usr/sbin/nginx -t
+ExecStartPost=/bin/systemctl reload nginx

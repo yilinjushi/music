@@ -108,6 +108,8 @@ const NETEASE_AUDIO_ID = /^\d{1,20}$/;
 const NETEASE_AUDIO_BITRATES = new Set([128000, 192000, 320000, 999000]);
 const NETEASE_TRACK_ID = /^(?:(?:netrack|ne_track)_)?\d{1,20}$/;
 const NETEASE_PLAYLIST_ID = /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
+const NETEASE_PLAYLIST_PAGE_SIZE = 100;
+const NETEASE_PLAYLIST_MAX_TOTAL_TRACKS = 20_000;
 const NETEASE_ALBUM_ID = /^(?:(?:nealbum|ne_album)_)?\d{1,20}$/;
 const NETEASE_ARTIST_ID = /^(?:(?:neartist|ne_artist)_)?\d{1,20}$/;
 const ALLOWED_FETCH_SITES = new Set(["same-origin", "same-site"]);
@@ -267,7 +269,7 @@ function sanitizePlaylistDetailForClient(value: unknown): NeteaseRecord | null {
   if (safeTracks.some((track) => track === null)) return null;
 
   const creator = normalizeSessionProfile(playlist.creator);
-  return {
+  const result: NeteaseRecord = {
     id,
     name,
     coverImgUrl: normalizePersistableResourceUrl(
@@ -286,6 +288,18 @@ function sanitizePlaylistDetailForClient(value: unknown): NeteaseRecord | null {
     trackIds: safeTracks.map((track) => ({ id: track!.id })),
     creator: creator ?? undefined,
   };
+  if (
+    typeof playlist.nextOffset === "number" &&
+    Number.isSafeInteger(playlist.nextOffset) &&
+    playlist.nextOffset >= 0 &&
+    playlist.nextOffset <= NETEASE_PLAYLIST_MAX_TOTAL_TRACKS
+  ) {
+    result.nextOffset = playlist.nextOffset;
+  }
+  if (typeof playlist.hasMore === "boolean") {
+    result.hasMore = playlist.hasMore;
+  }
+  return result;
 }
 
 function stripClientCredentialFields(
@@ -685,16 +699,30 @@ neteaseRoutes.post("/playlist", async (c) => {
   if (rejectsPublicRequestSource(c)) {
     return privateJson(c, { error: "Cross-site request rejected" }, 403);
   }
-  const body = await readStrictJsonObject(c, new Set(["playlistId"]));
+  const body = await readStrictJsonObject(
+    c,
+    new Set(["playlistId", "offset", "limit"])
+  );
   const playlistId = body?.playlistId;
   if (typeof playlistId !== "string" || !NETEASE_PLAYLIST_ID.test(playlistId)) {
     return privateJson(c, { error: "Invalid playlist ID" }, 400);
+  }
+  const offset = body?.offset ?? 0;
+  const limit = body?.limit ?? NETEASE_PLAYLIST_PAGE_SIZE;
+  if (
+    !isIntegerInRange(offset, 0, NETEASE_PLAYLIST_MAX_TOTAL_TRACKS) ||
+    !isIntegerInRange(limit, 1, 500)
+  ) {
+    return privateJson(c, { error: "Invalid pagination" }, 400);
   }
   const limited = await playlistRateLimit(c);
   if (limited) return limited;
   const session = await currentSession(c);
   try {
-    const res = await getPlaylistDetail(playlistId, session?.credential || "");
+    const res = await getPlaylistDetail(playlistId, session?.credential || "", {
+      offset,
+      limit,
+    });
     const safeDetail = sanitizePlaylistDetailForClient(res);
     if (!safeDetail) return upstreamFailure(c);
     return privateJson(c, safeDetail);

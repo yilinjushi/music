@@ -1,4 +1,4 @@
-import { act, type ReactNode } from "react";
+import { act, forwardRef, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NeteaseLogin } from "./NeteaseLogin";
@@ -20,9 +20,12 @@ vi.mock("@/lib/netease/qr-download", () => ({
   saveQrCanvasAsPng: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("qrcode.react", () => ({
-  QRCodeCanvas: ({ value }: { value: string }) => (
-    <canvas data-qr-value={value} />
-  ),
+  QRCodeCanvas: forwardRef<
+    HTMLCanvasElement,
+    { value: string; size?: number }
+  >(({ value, size }, ref) => (
+    <canvas ref={ref} data-qr-value={value} data-qr-size={size} />
+  )),
 }));
 vi.mock("@/components/ui/button", () => ({
   Button: ({
@@ -164,6 +167,24 @@ describe("NeteaseLogin account operation ownership", () => {
     act(() => root.unmount());
     container.remove();
     vi.restoreAllMocks();
+  });
+
+  it("renders a smaller QR source and exposes a long-pressable image", async () => {
+    api.getQrKey.mockResolvedValue("qr-key");
+    vi.spyOn(HTMLCanvasElement.prototype, "toDataURL").mockReturnValue(
+      "data:image/png;base64,qr"
+    );
+
+    await openQrLogin();
+    await flush();
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 25));
+    });
+
+    expect(container.querySelector("canvas")?.dataset.qrSize).toBe("256");
+    expect(
+      container.querySelector('img[alt*="长按保存到相册"]')
+    ).not.toBeNull();
   });
 
   it("aborts a closed QR owner and ignores its late key after reopen", async () => {

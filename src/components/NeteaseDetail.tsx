@@ -23,6 +23,7 @@ import {
   Album,
   Bookmark,
   ListMusic,
+  Download,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { writeClipboardText } from "@/lib/clipboard";
@@ -47,6 +48,11 @@ import {
   createNeteaseDetailPlaylist,
   normalizeNeteaseDetailCover,
 } from "@/lib/netease/netease-detail-import";
+import {
+  getAudioCacheJob,
+  startNeteasePlaylistCache,
+  type AudioCacheJobStatus,
+} from "@/lib/vps-audio-cache";
 
 interface NeteaseDetailProps {
   id: string | null;
@@ -68,7 +74,11 @@ interface UnifiedDetail {
   sub?: boolean;
   playCount?: number;
   creatorId?: string | number;
+  hasMore?: boolean;
+  nextOffset?: number;
 }
+
+const NETEASE_PLAYLIST_PAGE_SIZE = 100;
 
 export function NeteaseDetail({
   id,
@@ -84,7 +94,10 @@ export function NeteaseDetail({
   const [offset, setOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const loadingMoreRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [cacheJob, setCacheJob] = useState<AudioCacheJobStatus | null>(null);
+  const cacheTerminalNotifiedRef = useRef<string | null>(null);
 
   const createPlaylist = useMusicStore((state) => state.createPlaylist);
   const isShuffle = useMusicStore((state) => state.isShuffle);
@@ -128,6 +141,8 @@ export function NeteaseDetail({
             trackCount: res.trackCount,
             playCount: res.playCount,
             creatorId: res.creator?.userId,
+            hasMore: res.hasMore ?? res.trackCount > res.tracks.length,
+            nextOffset: res.nextOffset ?? res.tracks.length,
           };
           rawTracks = res.tracks;
         } else if (type === "artist") {
@@ -139,6 +154,8 @@ export function NeteaseDetail({
             description: res.artist.briefDesc,
             trackCount: res.artist.musicSize,
             albumCount: res.artist.albumSize,
+            hasMore: res.artist.musicSize > res.hotSongs.length,
+            nextOffset: res.hotSongs.length,
           };
           rawTracks = res.hotSongs;
         } else {
@@ -155,6 +172,8 @@ export function NeteaseDetail({
             trackCount: res.songs.length,
             publishTime: res.album.publishTime,
             sub: dynamicRes?.isSub || false,
+            hasMore: false,
+            nextOffset: res.songs.length,
           };
           rawTracks = res.songs;
         }
@@ -168,11 +187,68 @@ export function NeteaseDetail({
     );
 
   useEffect(() => {
-    if (type === "artist" && detail) {
-      setOffset(tracks.length);
-      setHasMore(detail.trackCount > tracks.length);
+    if (detail && (type === "artist" || type === "playlist")) {
+      const initialOffset = detail.nextOffset ?? tracks.length;
+      setOffset(initialOffset);
+      setHasMore(detail.hasMore ?? detail.trackCount > initialOffset);
+    } else {
+      setOffset(0);
+      setHasMore(false);
     }
-  }, [type, detail, tracks]);
+    // The detail object changes once per page navigation/retry. Track appends
+    // must not reset the continuation offset back to the first page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, detail]);
+
+  useEffect(() => {
+    setCacheJob(null);
+    cacheTerminalNotifiedRef.current = null;
+  }, [id, type]);
+
+  useEffect(() => {
+    const jobId = cacheJob?.jobId;
+    if (
+      !jobId ||
+      cacheJob?.state === "completed" ||
+      cacheJob?.state === "failed"
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const next = await getAudioCacheJob(jobId);
+        if (cancelled) return;
+        setCacheJob(next);
+        if (
+          (next.state === "completed" || next.state === "failed") &&
+          cacheTerminalNotifiedRef.current !== next.jobId
+        ) {
+          cacheTerminalNotifiedRef.current = next.jobId;
+          if (next.state === "completed") {
+            toast.success(
+              `云端缓存完成：成功 ${next.cached}，跳过 ${next.skipped}，失败 ${next.failed}`,
+              { duration: 6000 }
+            );
+          } else {
+            toast.error(next.error || "云端缓存任务失败", { duration: 6000 });
+          }
+        }
+      } catch (error) {
+        if (!cancelled) {
+          logger.warn("NeteaseDetail", "Audio cache polling failed", error);
+        }
+      }
+    };
+
+    void poll();
+    const timer = window.setInterval(() => void poll(), 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [cacheJob?.jobId, cacheJob?.state]);
 
   const onHeaderBack = () => {
     handleBack(onBack);
@@ -199,6 +275,21 @@ export function NeteaseDetail({
       toast.success(`成功导入 ${tracks.length} 首歌曲`, { id: toastId });
     } catch {
       toast.error("导入失败", { id: toastId });
+    }
+  };
+
+  const handleCachePlaylist = async () => {
+    if (!id || type !== "playlist" || !authenticated) return;
+    try {
+      const job = await startNeteasePlaylistCache(id);
+      cacheTerminalNotifiedRef.current = null;
+      setCacheJob(job);
+      toast.success("已启动云端缓存任务，页面可继续使用");
+    } catch (error) {
+      toast.error("无法启动云端缓存任务");
+      logger.error("NeteaseDetail", "Start audio cache failed", error, {
+        type,
+      });
     }
   };
 
@@ -249,9 +340,43 @@ export function NeteaseDetail({
   );
 
   const handleLoadMore = async () => {
-    if (!id || loadingMore || !hasMore || type !== "artist") return;
+    if (
+      !id ||
+      loadingMore ||
+      loadingMoreRef.current ||
+      !hasMore ||
+      (type !== "artist" && type !== "playlist")
+    )
+      return;
     setLoadingMore(true);
+    loadingMoreRef.current = true;
     try {
+      if (type === "playlist") {
+        const res = await getPlaylistDetail(id, "", undefined, {
+          offset,
+          limit: NETEASE_PLAYLIST_PAGE_SIZE,
+        });
+        const newTracks =
+          res?.tracks?.map((s) => convertSongToMusicTrack(s)) ?? [];
+        const nextOffset =
+          typeof res?.nextOffset === "number" && res.nextOffset > offset
+            ? res.nextOffset
+            : offset + newTracks.length;
+        if (nextOffset <= offset) {
+          setHasMore(false);
+          return;
+        }
+        setTracks((prev) => [...prev, ...newTracks]);
+        setOffset(nextOffset);
+        setHasMore(
+          res.hasMore ??
+            (detail?.trackCount
+              ? nextOffset < detail.trackCount
+              : newTracks.length > 0)
+        );
+        return;
+      }
+
       const res = await getArtistSongs(id, 50, offset);
       if (res?.songs?.length) {
         const newTracks = res.songs.map((s) => convertSongToMusicTrack(s));
@@ -275,6 +400,7 @@ export function NeteaseDetail({
         offset,
       });
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   };
@@ -341,6 +467,19 @@ export function NeteaseDetail({
             <Import className="w-4 h-4 mr-2" />
             导入歌单
           </DropdownMenuItem>
+          {authenticated && type === "playlist" && (
+            <DropdownMenuItem
+              onClick={handleCachePlaylist}
+              disabled={
+                cacheJob?.state === "queued" || cacheJob?.state === "running"
+              }
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {cacheJob?.state === "queued" || cacheJob?.state === "running"
+                ? `缓存中 ${cacheJob.processed}/${cacheJob.total || "准备"}`
+                : "缓存到云端"}
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -364,6 +503,13 @@ export function NeteaseDetail({
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
     >
+      {cacheJob && type === "playlist" && (
+        <div className="mx-4 mb-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
+          云端缓存：{cacheJob.processed}/{cacheJob.total || "准备中"}，成功{" "}
+          {cacheJob.cached}，失败 {cacheJob.failed}
+          {cacheJob.state === "completed" && "（已完成）"}
+        </div>
+      )}
       <div className="flex-1 min-h-0">
         <MusicTrackList
           tracks={filteredTracks}
@@ -372,7 +518,11 @@ export function NeteaseDetail({
           currentTrackKey={currentTrackKey}
           isPlaying={isPlaying}
           emptyMessage="列表为空"
-          onLoadMore={type === "artist" ? handleLoadMore : undefined}
+          onLoadMore={
+            type === "artist" || type === "playlist"
+              ? handleLoadMore
+              : undefined
+          }
           hasMore={hasMore}
           loading={loading || loadingMore}
         />

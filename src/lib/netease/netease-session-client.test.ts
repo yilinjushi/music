@@ -602,6 +602,34 @@ describe("NetEase browser session client", () => {
     vi.useRealTimers();
   });
 
+  it("forwards playlist continuation pagination without adding it to the default request", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          id: 7,
+          name: "Paged playlist",
+          trackCount: 250,
+          tracks: [],
+          trackIds: [],
+          hasMore: true,
+          nextOffset: 200,
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      )
+    );
+
+    await getPlaylistDetail("neplaylist_7", "", undefined, {
+      offset: 100,
+      limit: 100,
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0][1]?.body))).toEqual({
+      playlistId: "7",
+      offset: 100,
+      limit: 100,
+    });
+  });
+
   it("fetches market playlists and toplists with no-store and no Cache Storage", async () => {
     const cacheOpen = vi.fn();
     vi.stubGlobal("caches", { open: cacheOpen });

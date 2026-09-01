@@ -53,18 +53,24 @@ const STATUS_MESSAGES = {
 type QrStatus = keyof typeof STATUS_MESSAGES;
 type LoginMode = "cellphone" | "qr";
 
+interface NeteaseLoginProps {
+  /** Automatically open the QR login UI after the server session check fails. */
+  autoOpen?: boolean;
+}
+
 interface AccountOperationOwner {
   generation: number;
   controller: AbortController;
 }
 
-export function NeteaseLogin() {
+export function NeteaseLogin({ autoOpen = false }: NeteaseLoginProps) {
   const { user, authenticated, setSession, clearSession } = useNeteaseStore();
   const [showLoginDialog, setShowLoginDialog] = useState(false);
   const [showUserDrawer, setShowUserDrawer] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [qrUrl, setQrUrl] = useState("");
+  const [qrImageDataUrl, setQrImageDataUrl] = useState("");
   const [qrStatus, setQrStatus] = useState<QrStatus>("loading");
   const [loginMode, setLoginMode] = useState<LoginMode>("cellphone");
   const [phone, setPhone] = useState("");
@@ -123,6 +129,7 @@ export function NeteaseLogin() {
   const resetDialogState = useCallback(() => {
     clearTimer();
     setQrUrl("");
+    setQrImageDataUrl("");
     setQrStatus("loading");
     setLoading(false);
   }, [clearTimer]);
@@ -211,6 +218,7 @@ export function NeteaseLogin() {
       setLoading(true);
       setQrStatus("loading");
       setQrUrl("");
+      setQrImageDataUrl("");
 
       try {
         const key = await getQrKey(owner.controller.signal);
@@ -243,8 +251,15 @@ export function NeteaseLogin() {
     void getNeteaseSession(owner.controller.signal)
       .then((profile) => {
         if (!isOwner(owner)) return;
-        if (profile) setSession(profile);
-        else clearSession();
+        if (profile) {
+          setSession(profile);
+        } else {
+          clearSession();
+          if (autoOpen) {
+            setLoginMode("qr");
+            setShowLoginDialog(true);
+          }
+        }
       })
       .catch((error: unknown) => {
         if (
@@ -252,10 +267,35 @@ export function NeteaseLogin() {
           !(error instanceof Error && error.name === "AbortError")
         ) {
           clearSession();
+          if (autoOpen) {
+            setLoginMode("qr");
+            setShowLoginDialog(true);
+          }
         }
       });
     return () => invalidateOwner(owner);
-  }, [beginOperation, clearSession, invalidateOwner, isOwner, setSession]);
+  }, [
+    autoOpen,
+    beginOperation,
+    clearSession,
+    invalidateOwner,
+    isOwner,
+    setSession,
+  ]);
+
+  useEffect(() => {
+    if (!qrUrl || !qrCanvasRef.current) return;
+    if (qrStatus !== "waiting" && qrStatus !== "scanned") return;
+    const frame = window.requestAnimationFrame(() => {
+      try {
+        const canvas = qrCanvasRef.current;
+        setQrImageDataUrl(canvas?.toDataURL("image/png") || "");
+      } catch {
+        setQrImageDataUrl("");
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [qrStatus, qrUrl]);
 
   useEffect(() => {
     if (!showLoginDialog || loginMode !== "qr") return;
@@ -502,7 +542,7 @@ export function NeteaseLogin() {
 
             <TabsContent value="qr" className="mt-4">
               <div className="flex flex-col items-center space-y-4">
-                <div className="relative flex h-[180px] w-[180px] items-center justify-center">
+                <div className="relative flex h-[156px] w-[156px] items-center justify-center sm:h-[180px] sm:w-[180px]">
                   {qrStatus === "loading" && (
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
                   )}
@@ -511,14 +551,25 @@ export function NeteaseLogin() {
                     qrStatus === "scanned" ||
                     qrStatus === "success") &&
                     qrUrl && (
-                      <div className="h-full w-full rounded-xl bg-white p-2 shadow-sm">
+                      <div className="relative h-full w-full rounded-xl bg-white p-2 shadow-sm">
                         <QRCodeCanvas
                           ref={qrCanvasRef}
                           value={qrUrl}
-                          size={324}
+                          size={256}
                           level="M"
-                          className="h-full w-full"
+                          aria-hidden="true"
+                          className="pointer-events-none absolute h-px w-px opacity-0"
                         />
+                        {qrImageDataUrl ? (
+                          <img
+                            src={qrImageDataUrl}
+                            alt="网易云登录二维码，可长按保存到相册"
+                            draggable={false}
+                            className="h-full w-full select-none object-contain touch-manipulation"
+                          />
+                        ) : (
+                          <Loader2 className="absolute inset-0 m-auto h-7 w-7 animate-spin text-muted-foreground/50" />
+                        )}
                       </div>
                     )}
 
@@ -561,7 +612,7 @@ export function NeteaseLogin() {
                   (qrStatus === "waiting" || qrStatus === "scanned") && (
                     <div className="w-full max-w-xs space-y-2 rounded-xl bg-muted/30 p-3 text-center">
                       <p className="text-[11px] leading-relaxed text-muted-foreground">
-                        只有这一部手机？先保存二维码，再到网易云音乐“扫一扫”中从相册选择。
+                        可直接长按二维码保存到相册；只有这一部手机时，也可先保存二维码，再到网易云音乐“扫一扫”中从相册选择。
                       </p>
                       <Button
                         type="button"

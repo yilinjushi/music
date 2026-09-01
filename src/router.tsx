@@ -1,10 +1,11 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
+import { createBrowserRouter } from "react-router-dom";
 import { Suspense, lazy } from "react";
 import { RootLayout } from "@/components/RootLayout";
 import { RouteErrorPage } from "@/components/RouteErrorPage";
 import { PageLoader } from "@/components/PageLoader";
 import { SearchRoute } from "@/routes/SearchRoute";
 import { SettingsRoute } from "@/routes/SettingsRoute";
+import { HomeRoute } from "@/routes/HomeRoute";
 const FavoritesRoute = lazy(() =>
   import("@/routes/RouteWrappers").then((module) => ({
     default: module.FavoritesRoute,
@@ -74,7 +75,7 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate to="/search" replace />,
+        element: <HomeRoute />,
       },
       {
         path: "search",

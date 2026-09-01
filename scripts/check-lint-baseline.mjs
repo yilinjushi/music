@@ -8,11 +8,15 @@ const eslintBin = resolve(root, "node_modules/eslint/bin/eslint.js");
 const baseline = JSON.parse(
   readFileSync(resolve(root, "scripts/eslint-warning-baseline.json"), "utf8")
 );
-const run = spawnSync(process.execPath, [eslintBin, ".", "--format", "json"], {
-  cwd: root,
-  encoding: "utf8",
-  maxBuffer: 32 * 1024 * 1024,
-});
+const run = spawnSync(
+  process.execPath,
+  [eslintBin, ".", "--ignore-pattern", "server-dist/**", "--format", "json"],
+  {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+  }
+);
 
 if (!run.stdout) {
   process.stderr.write(run.stderr || "ESLint produced no report\n");

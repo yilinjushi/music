@@ -19,5 +19,9 @@
   "vars": {
     "APP_ORIGIN": "https://music.80007001.xyz",
     "NETEASE_SESSION_TTL_SECONDS": "2592000",
+    "QINIU_AUDIO_CACHE_BUCKET": "music-cache-overseas",
+    "QINIU_AUDIO_CACHE_REGION": "as0",
+    "QINIU_AUDIO_CACHE_DOMAIN": "http://music-cache.80007001.xyz",
+    "QINIU_AUDIO_CACHE_PREFIX": "otter-music-cache/v1",
   },
 }

@@ -8,8 +8,8 @@ import {
   fetchUpstreamWithDeadline,
   weapi,
 } from "@otter-music/shared";
-import forge from "node-forge/lib/forge";
-import "node-forge/lib/md5";
+import forge from "node-forge/lib/forge.js";
+import "node-forge/lib/md5.js";
 import type {
   QrKeyResponse,
   QrCheckResponse,
@@ -27,6 +27,8 @@ import type {
 import { proxyPrivateAudio } from "../proxy/audio";
 
 export const NETEASE_PLAYLIST_MAX_TRACKS = 500;
+export const NETEASE_PLAYLIST_PAGE_SIZE = 100;
+export const NETEASE_PLAYLIST_MAX_TOTAL_TRACKS = 20_000;
 export const NETEASE_PLAYLIST_TRACK_BATCH_SIZE = 100;
 const NETEASE_PLAYLIST_BASE_REQUESTS =
   1 +
@@ -245,19 +247,32 @@ export async function getUserPlaylists(
 
 export async function getPlaylistDetail(
   playlistId: string,
-  cookie: string
+  cookie: string,
+  options: NeteasePlaylistPageOptions = {}
 ): Promise<PlaylistDetail> {
   if (!NETEASE_PLAYLIST_ID.test(playlistId)) {
     throw new TypeError("Invalid NetEase playlist ID");
+  }
+  const offset = options.offset ?? 0;
+  const limit = options.limit ?? NETEASE_PLAYLIST_PAGE_SIZE;
+  if (
+    !Number.isSafeInteger(offset) ||
+    offset < 0 ||
+    offset > NETEASE_PLAYLIST_MAX_TOTAL_TRACKS ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > NETEASE_PLAYLIST_MAX_TRACKS
+  ) {
+    throw new TypeError("Invalid NetEase playlist pagination");
   }
   const realId = playlistId.replace(/^(neplaylist_|ne_playlist_)/, "");
   const budget = createPlaylistUpstreamBudget();
   const data = {
     id: realId,
-    offset: 0,
+    offset,
     total: true,
-    limit: NETEASE_PLAYLIST_MAX_TRACKS,
-    n: NETEASE_PLAYLIST_MAX_TRACKS,
+    limit,
+    n: limit,
     csrf_token: "",
   };
   const res = await requestPlaylistWeapiWithRetry<{
@@ -270,16 +285,16 @@ export async function getPlaylistDetail(
   }
   const reportedTrackCount = playlist.trackCount;
   if (
-    playlist.trackIds.length > NETEASE_PLAYLIST_MAX_TRACKS ||
+    playlist.trackIds.length > NETEASE_PLAYLIST_MAX_TOTAL_TRACKS ||
     (reportedTrackCount !== undefined &&
       (typeof reportedTrackCount !== "number" ||
         !Number.isSafeInteger(reportedTrackCount) ||
         reportedTrackCount < 0 ||
-        reportedTrackCount > NETEASE_PLAYLIST_MAX_TRACKS))
+        reportedTrackCount > NETEASE_PLAYLIST_MAX_TOTAL_TRACKS))
   ) {
     throw new Error("NetEase playlist exceeds the safe track limit");
   }
-  const trackIds = playlist.trackIds.map((item) => {
+  const allTrackIds = playlist.trackIds.map((item) => {
     const id =
       item && typeof item === "object"
         ? (item as Record<string, unknown>).id
@@ -289,9 +304,49 @@ export async function getPlaylistDetail(
     }
     return id;
   });
-  const tracks = await getPlaylistTracksDetail(trackIds, cookie, budget);
+  const totalTrackCount =
+    typeof reportedTrackCount === "number"
+      ? reportedTrackCount
+      : Math.max(allTrackIds.length, offset + allTrackIds.length);
+  if (totalTrackCount > NETEASE_PLAYLIST_MAX_TOTAL_TRACKS) {
+    throw new Error("NetEase playlist exceeds the safe track limit");
+  }
+  const receivedCompleteTrackList =
+    allTrackIds.length > limit ||
+    (typeof reportedTrackCount === "number" &&
+      allTrackIds.length >= totalTrackCount);
+  const pageItems =
+    offset >= totalTrackCount
+      ? []
+      : receivedCompleteTrackList
+        ? playlist.trackIds.slice(offset, offset + limit)
+        : playlist.trackIds;
+  const pageTrackIds = pageItems.map((item) => {
+    const id =
+      item && typeof item === "object"
+        ? (item as Record<string, unknown>).id
+        : undefined;
+    if (typeof id !== "number" || !Number.isSafeInteger(id) || id <= 0) {
+      throw new Error("Invalid NetEase playlist track ID");
+    }
+    return id;
+  });
+  const tracks = await getPlaylistTracksDetail(pageTrackIds, cookie, budget);
+  const nextOffset = offset + pageTrackIds.length;
 
-  return { ...playlist, tracks } as PlaylistDetail;
+  return {
+    ...playlist,
+    trackCount: totalTrackCount,
+    trackIds: pageItems,
+    tracks,
+    hasMore: pageTrackIds.length > 0 && nextOffset < totalTrackCount,
+    nextOffset,
+  } as PlaylistDetail;
+}
+
+export interface NeteasePlaylistPageOptions {
+  offset?: number;
+  limit?: number;
 }
 
 async function getPlaylistTracksDetail(

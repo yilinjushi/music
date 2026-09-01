@@ -21,11 +21,15 @@ import {
 import { FUNCTION_LOG_EVENTS, logFunctionError } from "@utils/security-logger";
 import { fetchUpstreamWithDeadline } from "@otter-music/shared";
 import { isValidAudioRange, proxyPrivateAudio } from "@utils/proxy/audio";
-import { NETEASE_SESSION_COOKIE } from "@utils/netease-session";
+import {
+  NETEASE_SESSION_COOKIE,
+  readNeteaseSession,
+} from "@utils/netease-session";
 import {
   checkFixedWindowRateLimit,
   requestClientId,
 } from "@utils/request-rate-limit";
+import { createQiniuAudioCache } from "@utils/qiniu-audio-cache";
 
 export const musicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -36,7 +40,29 @@ const GENERIC_AUDIO_BITRATES = new Set([128, 192, 320, 999]);
 const GENERIC_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
+const AUDIO_CACHE_SOURCES = new Set([
+  "netease",
+  "_netease",
+  "joox",
+  "kuwo",
+  "qq",
+  "migu",
+  "bilibili",
+]);
+const AUDIO_CACHE_ID_PATTERN = /^[A-Za-z0-9._~:+/=-]{1,256}$/;
+const AUDIO_CACHE_PLAYLIST_ID_PATTERN = /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
 type MusicContext = Context<{ Bindings: Env }>;
+
+function resolveAudioCache(c: MusicContext) {
+  return (
+    c.env.AUDIO_CACHE ??
+    createQiniuAudioCache(c.env, (promise) => c.executionCtx.waitUntil(promise))
+  );
+}
+
+function isAudioCacheIdentifier(value: unknown): value is string {
+  return typeof value === "string" && AUDIO_CACHE_ID_PATTERN.test(value);
+}
 
 function rejectSensitiveRequest(c: MusicContext) {
   c.header("Cache-Control", PRIVATE_NO_STORE);
@@ -329,7 +355,7 @@ musicRoutes.use("*", async (c, next) => {
   if (
     requestHeadersContainSensitiveData(
       c.req.raw.headers,
-      url.pathname.startsWith("/netease/")
+      url.pathname.startsWith("/netease/") || url.pathname.startsWith("/cache/")
     )
   ) {
     return rejectSensitiveRequest(c);
@@ -384,6 +410,95 @@ musicRoutes.use("*", async (c, next) => {
     c.res.headers.set("Cache-Control", PRIVATE_NO_STORE);
     c.res.headers.set("Pragma", "no-cache");
   }
+});
+
+musicRoutes.post("/cache/lookup", async (c) => {
+  const cache = resolveAudioCache(c);
+  if (!cache) return c.json({ error: "Audio cache unavailable" }, 404);
+  const body = await c.req.json<unknown>().catch(() => null);
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).some((key) => !["source", "id", "urlId"].includes(key))
+  ) {
+    return c.json({ error: "Invalid audio cache request" }, 400);
+  }
+  const record = body as Record<string, unknown>;
+  if (
+    typeof record.source !== "string" ||
+    !AUDIO_CACHE_SOURCES.has(record.source) ||
+    !isAudioCacheIdentifier(record.id) ||
+    (record.urlId !== undefined && !isAudioCacheIdentifier(record.urlId))
+  ) {
+    return c.json({ error: "Invalid audio cache request" }, 400);
+  }
+  try {
+    const cached = await cache.lookup({
+      source: record.source,
+      id: record.id,
+      urlId: record.urlId as string | undefined,
+    });
+    if (!cached) return c.json({ error: "Audio cache miss" }, 404);
+    return c.json(cached);
+  } catch {
+    return c.json({ error: "Audio cache unavailable" }, 503);
+  }
+});
+
+musicRoutes.get("/cache/audio", async (c) => {
+  const cache = resolveAudioCache(c);
+  if (!cache) return c.json({ error: "Audio cache unavailable" }, 404);
+  const cacheKey = new URL(c.req.url).searchParams.get("key") || "";
+  if (!/^[a-f0-9]{64}$/.test(cacheKey)) {
+    return c.json({ error: "Invalid audio cache key" }, 400);
+  }
+  try {
+    const response = await cache.serve(cacheKey, c.req.header("Range"));
+    return response ?? c.json({ error: "Audio cache miss" }, 404);
+  } catch {
+    return c.json({ error: "Audio cache unavailable" }, 503);
+  }
+});
+
+musicRoutes.post("/cache/netease-playlist", async (c) => {
+  const cache = resolveAudioCache(c);
+  if (!cache) return c.json({ error: "Audio cache unavailable" }, 404);
+  const body = await c.req.json<unknown>().catch(() => null);
+  if (
+    !body ||
+    typeof body !== "object" ||
+    Array.isArray(body) ||
+    Object.keys(body).length !== 1 ||
+    typeof (body as Record<string, unknown>).playlistId !== "string" ||
+    !AUDIO_CACHE_PLAYLIST_ID_PATTERN.test(
+      (body as Record<string, unknown>).playlistId as string
+    )
+  ) {
+    return c.json({ error: "Invalid playlist ID" }, 400);
+  }
+
+  try {
+    const session = await readNeteaseSession(c.env, c.req.header("Cookie"));
+    if (!session) return c.json({ error: "Unauthorized" }, 401);
+    return c.json(
+      await cache.startNeteasePlaylistJob(
+        (body as Record<string, unknown>).playlistId as string,
+        session.credential
+      )
+    );
+  } catch {
+    return c.json({ error: "Audio cache unavailable" }, 503);
+  }
+});
+
+musicRoutes.get("/cache/jobs/:jobId", async (c) => {
+  const cache = resolveAudioCache(c);
+  if (!cache) return c.json({ error: "Audio cache unavailable" }, 404);
+  const job = await cache.getJob(c.req.param("jobId"));
+  return job
+    ? c.json(job)
+    : c.json({ error: "Audio cache job not found" }, 404);
 });
 
 musicRoutes.get("/audio", async (c) => {
@@ -456,7 +571,7 @@ musicRoutes.get("/", async (c) => {
   // 2. Try Cache
   const cachedResponse = capabilityRequest
     ? null
-    : await getFromCache(c.req.raw);
+    : await getFromCache(c.req.raw, c.env?.CACHE);
   if (cachedResponse) {
     // Return a new response from the cached one to ensure headers are fresh
     return new Response(cachedResponse.body, cachedResponse);
@@ -501,7 +616,9 @@ musicRoutes.get("/", async (c) => {
 
     // 4. Save to Cache (Async)
     if (!capabilityRequest) {
-      c.executionCtx.waitUntil(putToCache(c.req.raw, response.clone(), "api"));
+      c.executionCtx.waitUntil(
+        putToCache(c.req.raw, response.clone(), "api", c.env?.CACHE)
+      );
     }
 
     return response;

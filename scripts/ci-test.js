@@ -44,6 +44,7 @@ const steps = [
   { name: "Lint", cmd: "npm run lint" },
   { name: "Frontend typecheck", cmd: "npm run typecheck" },
   { name: "Functions typecheck", cmd: "npm run typecheck:functions" },
+  { name: "Server typecheck", cmd: "npm run typecheck:server" },
   {
     name: "Unit and component tests",
     cmd: "npx --no-install vitest run --reporter=default --reporter=junit --outputFile.junit=artifacts/vitest-junit.xml",
@@ -54,6 +55,7 @@ const steps = [
     cmd: "npm run build",
     nestedEvidenceWriter: true,
   },
+  { name: "Server bundle", cmd: "npm run build:server" },
   {
     name: "PWA artifact contract",
     cmd: "npm run verify:pwa",

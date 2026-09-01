@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getPlaylistDetail,
   NETEASE_PLAYLIST_MAX_REQUESTS,
+  NETEASE_PLAYLIST_MAX_TOTAL_TRACKS,
   NETEASE_PLAYLIST_MAX_TRACKS,
+  NETEASE_PLAYLIST_PAGE_SIZE,
   NETEASE_PLAYLIST_TRACK_BATCH_SIZE,
   NETEASE_PLAYLIST_WALL_CLOCK_MS,
 } from "./netease-api";
@@ -126,7 +128,9 @@ describe("server NetEase playlist budget", () => {
         return new Promise<Response>(() => undefined);
       });
 
-    const request = getPlaylistDetail("7", "");
+    const request = getPlaylistDetail("7", "", {
+      limit: NETEASE_PLAYLIST_MAX_TRACKS,
+    });
     const rejection = expect(request).rejects.toThrow(/deadline|budget/i);
 
     await vi.advanceTimersByTimeAsync(NETEASE_PLAYLIST_WALL_CLOCK_MS + 1);
@@ -134,15 +138,133 @@ describe("server NetEase playlist budget", () => {
     expect(fetchMock).toHaveBeenCalledTimes(NETEASE_PLAYLIST_MAX_REQUESTS);
   });
 
-  it("rejects oversized trackIds after only the detail request", async () => {
+  it("paginates a playlist whose full track ID list exceeds one page", async () => {
     const trackIds = Array.from(
       { length: NETEASE_PLAYLIST_MAX_TRACKS + 1 },
       (_, index) => ({ id: index + 1 })
     );
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            playlist: {
+              id: 7,
+              trackCount: trackIds.length,
+              trackIds,
+            },
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            songs: Array.from(
+              { length: NETEASE_PLAYLIST_PAGE_SIZE },
+              (_, index) => ({ id: index + 1, name: `Song ${index + 1}` })
+            ),
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+    const detail = await getPlaylistDetail("7", "");
+
+    expect(detail.tracks).toHaveLength(NETEASE_PLAYLIST_PAGE_SIZE);
+    expect(detail.trackCount).toBe(trackIds.length);
+    expect(detail.nextOffset).toBe(NETEASE_PLAYLIST_PAGE_SIZE);
+    expect(detail.hasMore).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses the requested offset for a continuation page", async () => {
+    const trackIds = Array.from({ length: 250 }, (_, index) => ({
+      id: index + 1,
+    }));
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            playlist: { id: 7, trackCount: trackIds.length, trackIds },
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            songs: Array.from({ length: 100 }, (_, index) => ({
+              id: index + 101,
+              name: `Song ${index + 101}`,
+            })),
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+    const detail = await getPlaylistDetail("7", "", {
+      offset: 100,
+      limit: NETEASE_PLAYLIST_PAGE_SIZE,
+    });
+
+    expect(detail.tracks[0]?.id).toBe(101);
+    expect(detail.tracks).toHaveLength(NETEASE_PLAYLIST_PAGE_SIZE);
+    expect(detail.nextOffset).toBe(200);
+    expect(detail.hasMore).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("slices a complete playlist even when the requested page limit is larger", async () => {
+    const trackIds = Array.from({ length: 164 }, (_, index) => ({
+      id: index + 1,
+    }));
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            playlist: { id: 7, trackCount: trackIds.length, trackIds },
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            songs: Array.from({ length: 100 }, (_, index) => ({
+              id: index + 65,
+              name: `Song ${index + 65}`,
+            })),
+          }),
+          { headers: { "Content-Type": "application/json" } }
+        )
+      );
+
+    const detail = await getPlaylistDetail("7", "", {
+      offset: 64,
+      limit: NETEASE_PLAYLIST_MAX_TRACKS,
+    });
+
+    expect(detail.tracks).toHaveLength(100);
+    expect(detail.nextOffset).toBe(164);
+    expect(detail.hasMore).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a playlist whose total count exceeds the safety cap", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ playlist: { id: 7, trackIds } }), {
-        headers: { "Content-Type": "application/json" },
-      })
+      new Response(
+        JSON.stringify({
+          playlist: {
+            id: 7,
+            trackCount: NETEASE_PLAYLIST_MAX_TOTAL_TRACKS + 1,
+            trackIds: [{ id: 1 }],
+          },
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      )
     );
 
     await expect(getPlaylistDetail("7", "")).rejects.toThrow(
@@ -157,7 +279,7 @@ describe("server NetEase playlist budget", () => {
         JSON.stringify({
           playlist: {
             id: 7,
-            trackCount: NETEASE_PLAYLIST_MAX_TRACKS + 1,
+            trackCount: NETEASE_PLAYLIST_MAX_TOTAL_TRACKS + 1,
             trackIds: [{ id: 1 }],
           },
         }),
@@ -228,7 +350,9 @@ describe("server NetEase playlist budget", () => {
         );
       });
 
-    const detail = await getPlaylistDetail("neplaylist_7", "");
+    const detail = await getPlaylistDetail("neplaylist_7", "", {
+      limit: NETEASE_PLAYLIST_MAX_TRACKS,
+    });
 
     expect(detail.tracks).toHaveLength(trackCount);
     expect(fetchMock).toHaveBeenCalledTimes(4);
@@ -270,7 +394,9 @@ describe("server NetEase playlist budget", () => {
         );
       });
 
-    const detail = await getPlaylistDetail("7", "");
+    const detail = await getPlaylistDetail("7", "", {
+      limit: NETEASE_PLAYLIST_MAX_TRACKS,
+    });
 
     expect(detail.tracks).toHaveLength(101);
     expect(maxPendingBatches).toBe(2);

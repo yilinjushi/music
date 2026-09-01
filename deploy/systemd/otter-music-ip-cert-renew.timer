@@ -1,0 +1,11 @@
+[Unit]
+Description=Twice-daily Otter Music IP certificate renewal check
+
+[Timer]
+OnCalendar=*-*-* 00,12:00:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=otter-music-ip-cert-renew.service
+
+[Install]
+WantedBy=timers.target

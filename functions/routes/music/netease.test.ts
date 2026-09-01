@@ -650,6 +650,62 @@ describe("NetEase session routes", () => {
     expect(api.getPlaylistDetail).not.toHaveBeenCalled();
   });
 
+  it("validates and forwards playlist detail pagination", async () => {
+    const env = createEnv();
+    api.getPlaylistDetail.mockResolvedValue({
+      id: 7,
+      name: "Paged playlist",
+      trackCount: 250,
+      trackIds: [],
+      tracks: [],
+      nextOffset: 150,
+      hasMore: true,
+    });
+    const init = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://music.example",
+        "Sec-Fetch-Site": "same-origin",
+      },
+    };
+
+    const response = await neteaseRoutes.request(
+      "/playlist",
+      {
+        ...init,
+        body: JSON.stringify({ playlistId: "7", offset: 100, limit: 50 }),
+      },
+      env
+    );
+
+    expect(response.status).toBe(200);
+    expect(api.getPlaylistDetail).toHaveBeenCalledWith("7", "", {
+      offset: 100,
+      limit: 50,
+    });
+    await expect(response.json()).resolves.toMatchObject({
+      trackCount: 250,
+      nextOffset: 150,
+      hasMore: true,
+    });
+
+    for (const body of [
+      { playlistId: "7", offset: -1 },
+      { playlistId: "7", offset: 20_001 },
+      { playlistId: "7", limit: 0 },
+      { playlistId: "7", limit: 501 },
+      { playlistId: "7", offset: "100" },
+    ]) {
+      const invalid = await neteaseRoutes.request(
+        "/playlist",
+        { ...init, body: JSON.stringify(body) },
+        env
+      );
+      expect(invalid.status).toBe(400);
+    }
+  });
+
   it("rate limits public playlist expansion and fails closed without KV", async () => {
     const env = createEnv();
     api.getPlaylistDetail.mockResolvedValue({

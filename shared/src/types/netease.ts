@@ -136,6 +136,10 @@ export interface PlaylistDetail extends BaseEntity {
   playCount: number;
   tracks: SongDetail[];
   trackIds: PlaylistTrackId[];
+  /** True when another page can be requested from the server. */
+  hasMore?: boolean;
+  /** Absolute offset to use for the next page request. */
+  nextOffset?: number;
   creator?: UserProfile;
   subscribed?: boolean;
   // Backend-specific fields

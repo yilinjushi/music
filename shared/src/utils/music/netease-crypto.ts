@@ -1,6 +1,6 @@
-import forge from "node-forge/lib/forge";
-import "node-forge/lib/aes";
-import "node-forge/lib/rsa";
+import forge from "node-forge/lib/forge.js";
+import "node-forge/lib/aes.js";
+import "node-forge/lib/rsa.js";
 
 const NONCE = "0CoJUm6Qyw8W8jud";
 const PUB_KEY = "010001";

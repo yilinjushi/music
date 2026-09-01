@@ -293,12 +293,16 @@ export const getRecommendPlaylists = async (
 export const getPlaylistDetail = (
   playlistId: string,
   _legacyCredential: string = "",
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: { offset?: number; limit?: number }
 ) => {
   const realId = playlistId.replace(/^(neplaylist_|ne_playlist_)/, "");
+  const body: Record<string, unknown> = { playlistId: realId };
+  if (options?.offset !== undefined) body.offset = options.offset;
+  if (options?.limit !== undefined) body.limit = options.limit;
   return fetchNeteaseApi<PlaylistDetail>(
     "/playlist",
-    { playlistId: realId },
+    body,
     signal,
     PLAYLIST_DETAIL_TIMEOUT_MS
   );

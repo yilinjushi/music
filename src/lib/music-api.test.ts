@@ -33,6 +33,12 @@ const createTrack = (
   source,
 });
 
+const vpsCache = vi.hoisted(() => ({
+  lookupAudioCache: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/lib/vps-audio-cache", () => vpsCache);
+
 describe("musicApi.searchBestMatch", () => {
   beforeEach(() => {
     vi.mocked(MusicProviderFactory.getProvider).mockReset();
@@ -266,6 +272,8 @@ describe("musicApi local metadata", () => {
 describe("musicApi URL cache invalidation", () => {
   beforeEach(() => {
     vi.mocked(MusicProviderFactory.getProvider).mockReset();
+    vpsCache.lookupAudioCache.mockReset();
+    vpsCache.lookupAudioCache.mockResolvedValue(null);
     vi.mocked(cachedFetch).mockClear();
     vi.mocked(deleteCachedValue).mockReset();
   });
@@ -293,6 +301,28 @@ describe("musicApi URL cache invalidation", () => {
     expect(getUrl).toHaveBeenCalledOnce();
     expect(getUrl).toHaveBeenCalledWith(providerTrack, 320, controller.signal);
     expect(cachedFetch).not.toHaveBeenCalled();
+  });
+
+  it("uses a VPS file cache path before resolving a provider URL", async () => {
+    const cachedPath =
+      "/music-api/cache/audio?key=" + "b".repeat(64);
+    const getUrl = vi.fn().mockResolvedValue("https://audio.test/remote.mp3");
+    const providerTrack = createTrack("track-123", "_netease");
+    vi.mocked(MusicProviderFactory.getProvider).mockReturnValue({
+      source: "_netease",
+      search: vi.fn(),
+      getUrl,
+      getPic: vi.fn(),
+      getLyric: vi.fn(),
+    });
+    vpsCache.lookupAudioCache.mockResolvedValue(cachedPath);
+
+    await expect(musicApi.getUrl(providerTrack, 192)).resolves.toBe(cachedPath);
+    expect(vpsCache.lookupAudioCache).toHaveBeenCalledWith(
+      providerTrack,
+      undefined
+    );
+    expect(getUrl).not.toHaveBeenCalled();
   });
 
   it("preserves url_id when provider ids collide", async () => {
