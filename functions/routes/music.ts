@@ -571,7 +571,7 @@ musicRoutes.get("/", async (c) => {
   // 2. Try Cache
   const cachedResponse = capabilityRequest
     ? null
-    : await getFromCache(c.req.raw, c.env?.CACHE);
+    : await getFromCache(c.req.raw);
   if (cachedResponse) {
     // Return a new response from the cached one to ensure headers are fresh
     return new Response(cachedResponse.body, cachedResponse);
@@ -616,9 +616,7 @@ musicRoutes.get("/", async (c) => {
 
     // 4. Save to Cache (Async)
     if (!capabilityRequest) {
-      c.executionCtx.waitUntil(
-        putToCache(c.req.raw, response.clone(), "api", c.env?.CACHE)
-      );
+      c.executionCtx.waitUntil(putToCache(c.req.raw, response.clone(), "api"));
     }
 
     return response;

@@ -8,8 +8,8 @@ import {
   fetchUpstreamWithDeadline,
   weapi,
 } from "@otter-music/shared";
-import forge from "node-forge/lib/forge.js";
-import "node-forge/lib/md5.js";
+import forge from "node-forge/lib/forge";
+import "node-forge/lib/md5";
 import type {
   QrKeyResponse,
   QrCheckResponse,

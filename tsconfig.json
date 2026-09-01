@@ -23,5 +23,5 @@
     "types": ["vitest/globals"]
   },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["node_modules", "functions", "server", "server-dist"]
+  "exclude": ["node_modules", "functions"]
 }

@@ -52,7 +52,7 @@ import {
   getAudioCacheJob,
   startNeteasePlaylistCache,
   type AudioCacheJobStatus,
-} from "@/lib/vps-audio-cache";
+} from "@/lib/audio-cache";
 
 interface NeteaseDetailProps {
   id: string | null;

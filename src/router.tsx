@@ -5,7 +5,11 @@ import { RouteErrorPage } from "@/components/RouteErrorPage";
 import { PageLoader } from "@/components/PageLoader";
 import { SearchRoute } from "@/routes/SearchRoute";
 import { SettingsRoute } from "@/routes/SettingsRoute";
-import { HomeRoute } from "@/routes/HomeRoute";
+const HomeRoute = lazy(() =>
+  import("@/routes/HomeRoute").then((module) => ({
+    default: module.HomeRoute,
+  }))
+);
 const FavoritesRoute = lazy(() =>
   import("@/routes/RouteWrappers").then((module) => ({
     default: module.FavoritesRoute,

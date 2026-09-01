@@ -4,7 +4,7 @@ import {
   getAudioCacheJob,
   lookupAudioCache,
   startNeteasePlaylistCache,
-} from "./vps-audio-cache";
+} from "./audio-cache";
 
 const track: MusicTrack = {
   id: "123",
@@ -19,7 +19,7 @@ const track: MusicTrack = {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("VPS audio cache client", () => {
+describe("audio cache client", () => {
   it("returns a validated opaque cache path and sends no raw audio URL", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       Response.json({

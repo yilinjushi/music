@@ -9,7 +9,7 @@ import type {
 } from "@/types/music";
 import { cachedFetch, deleteCachedValue } from "@/lib/utils/cache";
 import { searchSuggest } from "@/lib/netease/netease-api";
-import { lookupAudioCache } from "@/lib/vps-audio-cache";
+import { lookupAudioCache } from "@/lib/audio-cache";
 import { MusicProviderFactory, isAbort } from "./music-provider";
 import { logger } from "@/lib/logger";
 

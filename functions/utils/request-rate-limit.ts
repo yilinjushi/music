@@ -75,20 +75,6 @@ export async function checkFixedWindowRateLimit(
   );
   const identifier = await digestIdentifier(clientId);
   const key = `request-rate:v1:${scope}:${windowIndex}:${identifier}`;
-  if (kv.consumeFixedWindow) {
-    const result = await kv.consumeFixedWindow(
-      key,
-      limit,
-      Math.max(60, windowSeconds * 2),
-      now
-    );
-    return {
-      allowed: result.allowed,
-      retryAfterSeconds,
-      remaining: Math.max(0, limit - result.count),
-    };
-  }
-
   return withRateLimitKeyLock(key, async () => {
     const raw = await kv.get(key);
     const parsed = Number.parseInt(typeof raw === "string" ? raw : "0", 10);

@@ -7,32 +7,6 @@ export interface KVNamespace {
     key: string,
     options?: { type?: "text" | "json" | "arrayBuffer" | "stream" }
   ): Promise<{ value: any; metadata: T | null }>;
-  /**
-   * Optional single-process implementation hook. Cloudflare KV does not
-   * expose this method; the VPS SQLite adapter uses it for atomic counters.
-   */
-  consumeFixedWindow?: (
-    key: string,
-    limit: number,
-    expirationTtl: number,
-    nowMs?: number
-  ) => Promise<{ allowed: boolean; count: number }>;
-}
-
-export interface CacheStorageLike {
-  open(name: string): Promise<CacheLike>;
-}
-
-export interface CacheLike {
-  match(request: Request): Promise<Response | undefined>;
-  put(request: Request, response: Response): Promise<void>;
-  delete(request: Request): Promise<boolean>;
-}
-
-export interface ApiResponseCache {
-  match(request: Request): Promise<Response | null>;
-  put(request: Request, response: Response): Promise<void>;
-  delete(request: Request): Promise<boolean>;
 }
 
 export interface AudioCacheTrackReference {
@@ -74,14 +48,13 @@ export interface AudioCacheLike {
     playlistId: string,
     credential: string
   ): Promise<AudioCacheJobStatus>;
-  getJob(jobId: string): AudioCacheJobStatus | Promise<AudioCacheJobStatus | null> | null;
+  getJob(jobId: string): Promise<AudioCacheJobStatus | null>;
 }
 
 export type Env = {
   APP_ORIGIN: string;
   oh_file_url: KVNamespace;
   SESSION_KV: KVNamespace;
-  CACHE?: ApiResponseCache;
   AUDIO_CACHE?: AudioCacheLike;
   NETEASE_SESSION_HMAC_SECRET: string;
   NETEASE_CREDENTIAL_ENC_KEY: string;

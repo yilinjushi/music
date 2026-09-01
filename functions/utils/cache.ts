@@ -5,7 +5,6 @@ import {
   isCanonicalCapabilityFieldName,
   isCanonicalSensitiveFieldName,
 } from "@shared/utils/sensitive-fields";
-import type { ApiResponseCache, CacheStorageLike } from "../types/hono";
 
 /**
  * Cache policy is intentionally conservative: account-bound requests and any
@@ -25,35 +24,6 @@ export const CACHE_CONFIG = {
 
 const CACHE_NAME = "otter-music-cache";
 const MAX_TEXT_INSPECTION_BYTES = 1024 * 1024;
-
-function getCloudflareCacheStorage(): CacheStorageLike {
-  const storage = (globalThis as typeof globalThis & {
-    caches?: CacheStorageLike;
-  }).caches;
-  if (!storage) throw new Error("Cache storage is unavailable");
-  return storage;
-}
-
-function createCloudflareCache(): ApiResponseCache {
-  return {
-    async match(request) {
-      const cache = await getCloudflareCacheStorage().open(CACHE_NAME);
-      return (await cache.match(request)) ?? null;
-    },
-    async put(request, response) {
-      const cache = await getCloudflareCacheStorage().open(CACHE_NAME);
-      await cache.put(request, response);
-    },
-    async delete(request) {
-      const cache = await getCloudflareCacheStorage().open(CACHE_NAME);
-      return cache.delete(request);
-    },
-  };
-}
-
-function resolveResponseCache(cache?: ApiResponseCache): ApiResponseCache {
-  return cache ?? createCloudflareCache();
-}
 
 export function isSensitiveFieldName(name: string): boolean {
   return isCanonicalSensitiveFieldName(name);
@@ -427,27 +397,18 @@ export async function responseContainsSensitiveData(
   return false;
 }
 
-export async function getFromCache(
-  request: Request,
-  responseCache?: ApiResponseCache
-): Promise<Response | null> {
+export async function getFromCache(request: Request): Promise<Response | null> {
   const key = await createCacheKey(request);
   if (!key) return null;
 
-  let cached: Response | null;
-  try {
-    cached = await resolveResponseCache(responseCache).match(key);
-  } catch {
-    // Cache is an optimization. A backend failure must not take down the
-    // ordinary music API or turn it into an unbounded relay.
-    return null;
-  }
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(key);
   if (!cached) return null;
   if (
     responseDisallowsStorage(cached) ||
     (await responseContainsSensitiveData(cached))
   ) {
-    await resolveResponseCache(responseCache).delete(key).catch(() => false);
+    await cache.delete(key);
     return null;
   }
   return cached;
@@ -456,8 +417,7 @@ export async function getFromCache(
 export async function putToCache(
   request: Request,
   response: Response,
-  type: keyof typeof CACHE_CONFIG,
-  responseCache?: ApiResponseCache
+  type: keyof typeof CACHE_CONFIG
 ): Promise<boolean> {
   if (
     !response.ok ||
@@ -479,23 +439,14 @@ export async function putToCache(
     headers: newHeaders,
   });
 
-  try {
-    await resolveResponseCache(responseCache).put(key, cachedResponse);
-    return true;
-  } catch {
-    return false;
-  }
+  const cache = await caches.open(CACHE_NAME);
+  await cache.put(key, cachedResponse);
+  return true;
 }
 
-export async function deleteCache(
-  request: Request,
-  responseCache?: ApiResponseCache
-): Promise<boolean> {
+export async function deleteCache(request: Request): Promise<boolean> {
   const key = await createCacheKey(request);
   if (!key) return false;
-  try {
-    return await resolveResponseCache(responseCache).delete(key);
-  } catch {
-    return false;
-  }
+  const cache = await caches.open(CACHE_NAME);
+  return cache.delete(key);
 }
