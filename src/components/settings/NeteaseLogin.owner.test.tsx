@@ -20,12 +20,11 @@ vi.mock("@/lib/netease/qr-download", () => ({
   saveQrCanvasAsPng: vi.fn().mockResolvedValue(true),
 }));
 vi.mock("qrcode.react", () => ({
-  QRCodeCanvas: forwardRef<
-    HTMLCanvasElement,
-    { value: string; size?: number }
-  >(({ value, size }, ref) => (
-    <canvas ref={ref} data-qr-value={value} data-qr-size={size} />
-  )),
+  QRCodeCanvas: forwardRef<HTMLCanvasElement, { value: string; size?: number }>(
+    ({ value, size }, ref) => (
+      <canvas ref={ref} data-qr-value={value} data-qr-size={size} />
+    )
+  ),
 }));
 vi.mock("@/components/ui/button", () => ({
   Button: ({

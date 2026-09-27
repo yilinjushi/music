@@ -22,7 +22,12 @@ export function PageError({
   children,
 }: PageErrorProps) {
   return (
-    <div className={cn("flex flex-1 flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-500", className)}>
+    <div
+      className={cn(
+        "flex flex-1 flex-col items-center justify-center p-6 animate-in fade-in zoom-in-95 duration-500",
+        className
+      )}
+    >
       <div className="mb-8 flex h-24 w-24 select-none items-center justify-center rounded-3xl bg-secondary/40 text-5xl">
         {icon}
       </div>

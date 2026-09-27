@@ -22,10 +22,15 @@ const dynamicImportErrorPatterns = [
 export function isDynamicImportError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error || "");
   const lowerMessage = message.toLowerCase();
-  return dynamicImportErrorPatterns.some((pattern) => lowerMessage.includes(pattern));
+  return dynamicImportErrorPatterns.some((pattern) =>
+    lowerMessage.includes(pattern)
+  );
 }
 
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+export class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
   /** 初始化全局错误边界状态。 */
   constructor(props: ErrorBoundaryProps) {
     super(props);
@@ -39,9 +44,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   /** 记录 React 错误边界捕获到的异常上下文。 */
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    logger.error("ErrorBoundary", error.message || "React render error", error, {
-      componentStack: errorInfo.componentStack,
-    });
+    logger.error(
+      "ErrorBoundary",
+      error.message || "React render error",
+      error,
+      {
+        componentStack: errorInfo.componentStack,
+      }
+    );
   }
 
   /** 渲染正常内容或异常恢复界面。 */
@@ -57,13 +67,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <div className="flex items-center justify-center h-screen bg-background">
           <div className="text-center p-6">
             <div className="text-6xl mb-4">😵</div>
-            <h1 className="text-xl font-semibold mb-2 text-foreground">{title}</h1>
-            <p className="text-sm text-muted-foreground mb-4">
-              {message}
-            </p>
-            <Button onClick={() => window.location.reload()}>
-              重新加载
-            </Button>
+            <h1 className="text-xl font-semibold mb-2 text-foreground">
+              {title}
+            </h1>
+            <p className="text-sm text-muted-foreground mb-4">{message}</p>
+            <Button onClick={() => window.location.reload()}>重新加载</Button>
           </div>
         </div>
       );

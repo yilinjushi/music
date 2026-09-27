@@ -1,4 +1,8 @@
-import { useRouteError, isRouteErrorResponse, useNavigate } from "react-router-dom";
+import {
+  useRouteError,
+  isRouteErrorResponse,
+  useNavigate,
+} from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PageError } from "@/components/PageError";
 
@@ -19,21 +23,21 @@ export function RouteErrorPage() {
         : String(error || "发生了未知错误");
 
   return (
-    <PageError 
+    <PageError
       className="h-dvh w-full bg-background"
-      title={title} 
-      message={message} 
+      title={title}
+      message={message}
       icon={emoji}
     >
-      <Button 
-        variant="outline" 
-        className="flex-1 h-11 rounded-xl" 
+      <Button
+        variant="outline"
+        className="flex-1 h-11 rounded-xl"
         onClick={() => navigate(-1)}
       >
         返回
       </Button>
-      <Button 
-        className="flex-1 h-11 rounded-xl shadow-lg shadow-primary/20" 
+      <Button
+        className="flex-1 h-11 rounded-xl shadow-lg shadow-primary/20"
         onClick={() => navigate("/", { replace: true })}
       >
         首页

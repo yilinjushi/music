@@ -177,7 +177,7 @@ export function MusicTrackItem({
         <div className="min-w-0 flex flex-col gap-0.5">
           <div
             className={cn(
-              "font-medium flex items-center gap-1.5",
+              "text-lg font-medium flex items-center gap-1.5",
               isCurrent && "text-primary"
             )}
           >
@@ -215,7 +215,7 @@ export function MusicTrackItem({
             )}
             <MusicTrackVariants variants={variants} />
           </div>
-          <div className="text-xs text-muted-foreground truncate opacity-70">
+          <div className="text-sm text-muted-foreground truncate opacity-70">
             {track.artist.join(" / ")}
             {track.album && ` • ${track.album}`}
           </div>

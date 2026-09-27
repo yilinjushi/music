@@ -91,7 +91,7 @@ interface MusicTrackListProps {
   headerActions?: ReactNode;
 }
 
-const ROW_HEIGHT = 60;
+const ROW_HEIGHT = 68;
 
 function SortableTrackItem({
   itemKey,
@@ -331,12 +331,17 @@ export function MusicTrackList({
                 <div>标题</div>
               </>
             )}
-            <div className="flex items-center justify-end gap-1">
+            <div
+              className={cn(
+                "flex items-center justify-end",
+                headerLead ? "gap-0" : "gap-1"
+              )}
+            >
               {headerActions}
               <Button
                 variant="ghost"
                 size="icon"
-                className={headerLead ? "h-11 w-11" : "h-7 w-7"}
+                className={headerLead ? "h-11 w-9 text-foreground" : "h-7 w-7"}
                 aria-label="多选"
                 onClick={() => {
                   setIsSelectionMode(true);

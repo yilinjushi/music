@@ -47,12 +47,15 @@ export const Marquee: React.FC<MarqueeProps> = ({
   return (
     <div
       ref={containerRef}
-      className={cn("relative flex overflow-hidden whitespace-nowrap select-none min-w-0", className)}
+      className={cn(
+        "relative flex overflow-hidden whitespace-nowrap select-none min-w-0",
+        className
+      )}
     >
       <div
         className={cn("flex items-center", {
           // 只有当 shouldAnimate 为 true 且 play 为 true 时才添加动画类
-          "animate-marquee": shouldAnimate && play, 
+          "animate-marquee": shouldAnimate && play,
           "hover:paused": pauseOnHover && shouldAnimate && play,
         })}
         style={
@@ -61,13 +64,19 @@ export const Marquee: React.FC<MarqueeProps> = ({
             : {}
         }
       >
-        <div className="shrink-0 flex items-center" style={{ paddingRight: shouldAnimate ? `${gap}px` : 0 }}>
+        <div
+          className="shrink-0 flex items-center"
+          style={{ paddingRight: shouldAnimate ? `${gap}px` : 0 }}
+        >
           <span ref={contentRef}>{children}</span>
         </div>
-        
+
         {/* 只有在动画激活时才渲染副本，节省性能并保持逻辑一致 */}
         {shouldAnimate && play && (
-          <div className="shrink-0 flex items-center" style={{ paddingRight: `${gap}px` }}>
+          <div
+            className="shrink-0 flex items-center"
+            style={{ paddingRight: `${gap}px` }}
+          >
             <span>{children}</span>
           </div>
         )}

@@ -29,6 +29,7 @@ import {
   X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { DetailSkeleton } from "@/components/skeletons/DetailSkeleton";
 import toast from "react-hot-toast";
 import { writeClipboardText } from "@/lib/clipboard";
 import {
@@ -493,7 +494,7 @@ export function NeteaseDetail({
             aria-label="更多详情操作"
             className={
               compact
-                ? "h-11 w-11 text-foreground"
+                ? "h-11 w-9 text-foreground"
                 : "text-muted-foreground hover:text-foreground"
             }
           >
@@ -545,6 +546,8 @@ export function NeteaseDetail({
     />
   );
 
+  if (compact && loading) return <DetailSkeleton onBack={onHeaderBack} bare />;
+
   if (compact && !loading && !error && detail) {
     const total = detail.trackCount;
     const cached = cacheStatus?.ready ?? 0;
@@ -573,12 +576,16 @@ export function NeteaseDetail({
         >
           <Play className="h-6 w-6 fill-current" />
         </Button>
-        <span className="truncate text-lg font-bold tabular-nums text-foreground">
-          {cached}/{total}
-          <span className="ml-1 text-sm font-normal text-muted-foreground">
-            （缓存）
+        <div className="flex min-w-0 flex-col leading-tight">
+          <span className="text-xl font-bold tabular-nums text-foreground">
+            {cached}/{total}
           </span>
-        </span>
+          <span className="text-xs text-muted-foreground">
+            {cached >= total - (cacheStatus?.unavailable.length ?? 0)
+              ? `已全部缓存 · 无音源隐藏 ${cacheStatus?.unavailable.length ?? 0} 首`
+              : `已缓存 ${cached} 首 · 共 ${total} 首`}
+          </span>
+        </div>
       </div>
     );
     const headerActions = (
@@ -586,7 +593,7 @@ export function NeteaseDetail({
         <Button
           variant="ghost"
           size="icon"
-          className="h-11 w-11 text-foreground"
+          className="h-11 w-9 text-foreground"
           onClick={() => {
             if (searchOpen) setSearchQuery("");
             setSearchOpen(!searchOpen);

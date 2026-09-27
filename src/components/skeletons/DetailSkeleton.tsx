@@ -3,11 +3,23 @@ import { PageLayout } from "@/components/PageLayout";
 
 interface DetailSkeletonProps {
   onBack: () => void;
+  /** Home page: no title bar / back button, just the list placeholder. */
+  bare?: boolean;
 }
 
 const LIST_COUNT = 10;
 
-export function DetailSkeleton({ onBack }: DetailSkeletonProps) {
+export function DetailSkeleton({ onBack, bare }: DetailSkeletonProps) {
+  if (bare) {
+    return (
+      <div className="flex-1 min-h-0 px-4 py-2 space-y-1">
+        <Skeleton className="h-12 w-40 mb-2" />
+        {Array.from({ length: LIST_COUNT }).map((_, i) => (
+          <Skeleton key={i} className="h-14 w-full" />
+        ))}
+      </div>
+    );
+  }
   return (
     <PageLayout title="加载中..." onBack={onBack}>
       <div className="flex h-full min-h-0 flex-col">
