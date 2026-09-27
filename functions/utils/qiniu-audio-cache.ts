@@ -25,8 +25,9 @@ const JOB_KEY_PREFIX = "audio-cache-job:v1:";
 const ACTIVE_PLAYLIST_KEY_PREFIX = "audio-cache-playlist:v1:";
 const ACTIVE_TRACK_KEY_PREFIX = "audio-cache-track:v1:";
 const ACTIVE_TRACK_TTL_SECONDS = 10 * 60;
-const PENDING_KEY_PREFIX = "audio-cache-pending:v1:";
-const MISS_KEY_PREFIX = "audio-cache-miss:v1:";
+const PLAYLIST_STATE_KEY_PREFIX = "audio-cache-playlist-state:v1:";
+// Per-run cap on reading per-song records left by the play-time cache path.
+const SYNC_LEGACY_RECORD_CHECKS = 40;
 const PLAYLIST_STATUS_KEY_PREFIX = "audio-cache-playlist-status:v1:";
 const PLAYLIST_TRACKS_KEY_PREFIX = "audio-cache-playlist-tracks:v1:";
 const PLAYLIST_TRACKS_FULL_REFRESH_MS = 6 * 60 * 60_000;
@@ -70,6 +71,18 @@ interface QiniuCacheRecord {
   contentType: string;
   byteSize?: number;
   createdAt: number;
+}
+
+interface PlaylistSyncState {
+  /** song id -> stored bitrate (kbps) */
+  ready: Record<string, number>;
+  /** song id -> consecutive rounds with no complete source */
+  miss: Record<string, { rounds: number; at: number }>;
+  /** song id -> Qiniu download submitted, waiting to be verified */
+  pending: Record<
+    string,
+    { objectKey: string; br: number; submittedAt: number }
+  >;
 }
 
 interface QiniuAudioCacheJob extends AudioCacheJobStatus {
@@ -861,14 +874,32 @@ class QiniuAudioCache implements AudioCacheLike {
     const deadline =
       Date.now() + (budget.timeMs ?? SYNC_DEFAULT_TIME_BUDGET_MS);
     let subrequestsLeft = budget.subrequests ?? SYNC_DEFAULT_SUBREQUEST_BUDGET;
+    const outOfTime = () => Date.now() > deadline;
     const spend = (count: number) => {
-      if (subrequestsLeft < count || Date.now() > deadline) return false;
+      if (subrequestsLeft < count || outOfTime()) return false;
       subrequestsLeft -= count;
       return true;
     };
 
     const tracks = await this.loadSyncTracks(normalizedPlaylistId, credential);
     subrequestsLeft -= 2;
+
+    // One compact state document per playlist: a run costs a couple of KV
+    // operations instead of three reads per song (Workers free plan allows
+    // 1000 KV operations per invocation).
+    const stateKey = PLAYLIST_STATE_KEY_PREFIX + normalizedPlaylistId;
+    const saved = (await this.env.oh_file_url.get(stateKey, {
+      type: "json",
+    })) as Partial<PlaylistSyncState> | null;
+    const state: PlaylistSyncState = {
+      ready: saved?.ready && typeof saved.ready === "object" ? saved.ready : {},
+      miss: saved?.miss && typeof saved.miss === "object" ? saved.miss : {},
+      pending:
+        saved?.pending && typeof saved.pending === "object"
+          ? saved.pending
+          : {},
+    };
+    let legacyChecksLeft = SYNC_LEGACY_RECORD_CHECKS;
 
     const result: AudioCacheSyncResult = {
       total: tracks.length,
@@ -880,21 +911,30 @@ class QiniuAudioCache implements AudioCacheLike {
     };
 
     for (const track of tracks) {
-      const hash = await hashTargetKey(
-        canonicalTargetKey({ source: "_netease", id: track.id })
-      );
-      if (await this.readRecord(hash)) {
+      if (state.ready[track.id]) {
         result.ready += 1;
         continue;
       }
-
-      const miss = await this.readMiss(hash);
+      const miss = state.miss[track.id];
       if (miss && miss.rounds >= MISS_ROUNDS_BEFORE_UNAVAILABLE) {
-        result.unavailable.push(track.id);
+        if (Date.now() - miss.at < MISS_TTL_SECONDS * 1000) {
+          result.unavailable.push(track.id);
+          continue;
+        }
+        delete state.miss[track.id]; // retry after the TTL
+      }
+      if (outOfTime()) {
+        result.remaining += 1;
         continue;
       }
 
-      const pending = await this.readPending(hash);
+      const targetKey = canonicalTargetKey({
+        source: "_netease",
+        id: track.id,
+      });
+      const hash = await hashTargetKey(targetKey);
+
+      const pending = state.pending[track.id];
       if (pending) {
         const age = Date.now() - pending.submittedAt;
         if (age < PENDING_VERIFY_AFTER_MS || !spend(1)) {
@@ -905,12 +945,13 @@ class QiniuAudioCache implements AudioCacheLike {
         if (ready) {
           await this.writeReadyRecord(
             hash,
-            canonicalTargetKey({ source: "_netease", id: track.id }),
+            targetKey,
             pending.objectKey,
             pending.br,
             ready
           );
-          await this.env.oh_file_url.delete(PENDING_KEY_PREFIX + hash);
+          delete state.pending[track.id];
+          state.ready[track.id] = pending.br;
           result.ready += 1;
           continue;
         }
@@ -918,15 +959,29 @@ class QiniuAudioCache implements AudioCacheLike {
           result.pending += 1;
           continue;
         }
-        // The download never landed: count it as a failed round and retry.
-        await this.env.oh_file_url.delete(PENDING_KEY_PREFIX + hash);
-        await this.recordMiss(hash, miss);
+        // The download never landed: count a failed round and retry later.
+        delete state.pending[track.id];
+        state.miss[track.id] = {
+          rounds: (miss?.rounds ?? 0) + 1,
+          at: Date.now(),
+        };
         result.remaining += 1;
         continue;
       }
 
-      // Budget for one submit: NetEase URL + Qiniu submit, and up to 4 more
-      // for the generic fallback (2 searches + URL).
+      // Songs cached earlier by the play-time path have only a per-song
+      // record; adopt them (bounded number of KV reads per run).
+      if (legacyChecksLeft > 0) {
+        legacyChecksLeft -= 1;
+        const record = await this.readRecord(hash);
+        if (record) {
+          state.ready[track.id] = record.storedBr;
+          result.ready += 1;
+          continue;
+        }
+      }
+
+      // One submit costs a NetEase URL lookup + a Qiniu submit.
       if (!spend(2)) {
         result.remaining += 1;
         continue;
@@ -966,7 +1021,8 @@ class QiniuAudioCache implements AudioCacheLike {
       }
 
       if (!source) {
-        const rounds = await this.recordMiss(hash, miss);
+        const rounds = (miss?.rounds ?? 0) + 1;
+        state.miss[track.id] = { rounds, at: Date.now() };
         if (rounds >= MISS_ROUNDS_BEFORE_UNAVAILABLE) {
           result.unavailable.push(track.id);
         } else {
@@ -976,15 +1032,11 @@ class QiniuAudioCache implements AudioCacheLike {
       }
 
       if (await submitQiniuFetch(this.config, source.url, objectKeyValue)) {
-        await this.env.oh_file_url.put(
-          PENDING_KEY_PREFIX + hash,
-          JSON.stringify({
-            objectKey: objectKeyValue,
-            br: source.br,
-            submittedAt: Date.now(),
-          }),
-          { expirationTtl: 24 * 60 * 60 }
-        );
+        state.pending[track.id] = {
+          objectKey: objectKeyValue,
+          br: source.br,
+          submittedAt: Date.now(),
+        };
         result.submitted += 1;
         result.pending += 1;
       } else {
@@ -992,6 +1044,7 @@ class QiniuAudioCache implements AudioCacheLike {
       }
     }
 
+    await this.env.oh_file_url.put(stateKey, JSON.stringify(state));
     await this.env.oh_file_url.put(
       PLAYLIST_STATUS_KEY_PREFIX + normalizedPlaylistId,
       JSON.stringify({ ...result, updatedAt: Date.now() }),
@@ -1011,50 +1064,6 @@ class QiniuAudioCache implements AudioCacheLike {
     return value && typeof value === "object"
       ? (value as AudioCacheSyncResult & { updatedAt: number })
       : null;
-  }
-
-  private async readPending(
-    hash: string
-  ): Promise<{ objectKey: string; br: number; submittedAt: number } | null> {
-    const value = await this.env.oh_file_url.get(PENDING_KEY_PREFIX + hash, {
-      type: "json",
-    });
-    if (!value || typeof value !== "object") return null;
-    const pending = value as {
-      objectKey?: unknown;
-      br?: unknown;
-      submittedAt?: unknown;
-    };
-    return typeof pending.objectKey === "string" &&
-      pending.objectKey.startsWith(`${this.config.objectPrefix}/`) &&
-      typeof pending.br === "number" &&
-      typeof pending.submittedAt === "number"
-      ? (pending as { objectKey: string; br: number; submittedAt: number })
-      : null;
-  }
-
-  private async readMiss(hash: string): Promise<{ rounds: number } | null> {
-    const value = await this.env.oh_file_url.get(MISS_KEY_PREFIX + hash, {
-      type: "json",
-    });
-    return value &&
-      typeof value === "object" &&
-      typeof (value as { rounds?: unknown }).rounds === "number"
-      ? (value as { rounds: number })
-      : null;
-  }
-
-  private async recordMiss(
-    hash: string,
-    previous: { rounds: number } | null
-  ): Promise<number> {
-    const rounds = (previous?.rounds ?? 0) + 1;
-    await this.env.oh_file_url.put(
-      MISS_KEY_PREFIX + hash,
-      JSON.stringify({ rounds, at: Date.now() }),
-      { expirationTtl: MISS_TTL_SECONDS }
-    );
-    return rounds;
   }
 
   async getJob(jobId: string): Promise<AudioCacheJobStatus | null> {

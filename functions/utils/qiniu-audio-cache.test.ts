@@ -273,21 +273,17 @@ describe("Qiniu audio cache adapter", () => {
         pending: 1,
         ready: 0,
       });
-      expect(
-        [...store.keys()].some((key) =>
-          key.startsWith("audio-cache-pending:v1:")
-        )
-      ).toBe(true);
+      const stateKey = [...store.keys()].find((key) =>
+        key.startsWith("audio-cache-playlist-state:v1:")
+      )!;
+      expect(Object.keys(JSON.parse(store.get(stateKey)!).pending)).toEqual([
+        "123",
+      ]);
 
       // Pretend the submit happened long enough ago, then the probe finds it.
-      for (const [key, value] of store) {
-        if (key.startsWith("audio-cache-pending:v1:")) {
-          store.set(
-            key,
-            JSON.stringify({ ...JSON.parse(value), submittedAt: 0 })
-          );
-        }
-      }
+      const state = JSON.parse(store.get(stateKey)!);
+      state.pending["123"].submittedAt = 0;
+      store.set(stateKey, JSON.stringify(state));
       fetchMock.mockResolvedValueOnce(
         new Response("x", {
           status: 206,
