@@ -6,31 +6,35 @@ export interface RateLimitResult {
   remaining: number;
 }
 
-// KV read/modify/write is not atomic. Serialize identical keys inside an
-// isolate so a burst handled by the same worker cannot have every request read
-// the same stale count. A deployment-level atomic rate limiter is still the
-// required outer guard across isolates/regions.
-const rateLimitKeyTails = new Map<string, Promise<void>>();
+// Counters live in isolate memory instead of KV: every media range request
+// hits this guard, and KV's free tier allows only 1,000 writes per day. The
+// trade-off is that each isolate counts separately, which is acceptable for a
+// private deployment. Counters are grouped per binding object so separate
+// environments (and tests) never share state.
+const counterStores = new WeakMap<
+  object,
+  Map<string, { count: number; expiresAt: number }>
+>();
+const MAX_TRACKED_KEYS = 5000;
 
-async function withRateLimitKeyLock<T>(
-  key: string,
-  operation: () => Promise<T>
-): Promise<T> {
-  const previous = rateLimitKeyTails.get(key) ?? Promise.resolve();
-  let release!: () => void;
-  const current = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  const tail = previous.catch(() => undefined).then(() => current);
-  rateLimitKeyTails.set(key, tail);
-
-  await previous.catch(() => undefined);
-  try {
-    return await operation();
-  } finally {
-    release();
-    if (rateLimitKeyTails.get(key) === tail) rateLimitKeyTails.delete(key);
+function counterStore(owner: object) {
+  let store = counterStores.get(owner);
+  if (!store) {
+    store = new Map();
+    counterStores.set(owner, store);
   }
+  return store;
+}
+
+function pruneExpired(
+  store: Map<string, { count: number; expiresAt: number }>,
+  now: number
+) {
+  if (store.size < MAX_TRACKED_KEYS) return;
+  for (const [key, entry] of store) {
+    if (entry.expiresAt <= now) store.delete(key);
+  }
+  if (store.size >= MAX_TRACKED_KEYS) store.clear();
 }
 
 async function digestIdentifier(value: string): Promise<string> {
@@ -50,8 +54,8 @@ export function requestClientId(headers: Headers): string {
 }
 
 /**
- * Small fixed-window guard suitable for a private Pages deployment. KV is not
- * a globally atomic counter, so platform-level rate limiting remains the
+ * Small fixed-window guard suitable for a private Pages deployment. Counters
+ * are per isolate (see above), so platform-level rate limiting remains the
  * recommended production outer layer; this guard still fails closed and
  * prevents accidental exposure as an unrestricted media relay.
  */
@@ -75,22 +79,22 @@ export async function checkFixedWindowRateLimit(
   );
   const identifier = await digestIdentifier(clientId);
   const key = `request-rate:v1:${scope}:${windowIndex}:${identifier}`;
-  return withRateLimitKeyLock(key, async () => {
-    const raw = await kv.get(key);
-    const parsed = Number.parseInt(typeof raw === "string" ? raw : "0", 10);
-    const count = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  // The binding only anchors the counter store, but a missing binding still
+  // means a misconfigured deployment, so keep failing closed.
+  if (!kv) throw new Error("Rate-limit binding unavailable");
+  const store = counterStore(kv);
+  pruneExpired(store, now);
+  const entry = store.get(key);
+  const count = entry && entry.expiresAt > now ? entry.count : 0;
 
-    if (count >= limit) {
-      return { allowed: false, retryAfterSeconds, remaining: 0 };
-    }
+  if (count >= limit) {
+    return { allowed: false, retryAfterSeconds, remaining: 0 };
+  }
 
-    await kv.put(key, String(count + 1), {
-      expirationTtl: Math.max(60, windowSeconds * 2),
-    });
-    return {
-      allowed: true,
-      retryAfterSeconds,
-      remaining: Math.max(0, limit - count - 1),
-    };
-  });
+  store.set(key, { count: count + 1, expiresAt: (windowIndex + 1) * windowMs });
+  return {
+    allowed: true,
+    retryAfterSeconds,
+    remaining: Math.max(0, limit - count - 1),
+  };
 }
