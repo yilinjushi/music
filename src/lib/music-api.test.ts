@@ -35,6 +35,7 @@ const createTrack = (
 
 const audioCache = vi.hoisted(() => ({
   lookupAudioCache: vi.fn().mockResolvedValue(null),
+  requestNeteaseTrackCache: vi.fn(),
 }));
 
 vi.mock("@/lib/audio-cache", () => audioCache);
@@ -304,8 +305,7 @@ describe("musicApi URL cache invalidation", () => {
   });
 
   it("uses a cloud cache path before resolving a provider URL", async () => {
-    const cachedPath =
-      "/music-api/cache/audio?key=" + "b".repeat(64);
+    const cachedPath = "/music-api/cache/audio?key=" + "b".repeat(64);
     const getUrl = vi.fn().mockResolvedValue("https://audio.test/remote.mp3");
     const providerTrack = createTrack("track-123", "_netease");
     vi.mocked(MusicProviderFactory.getProvider).mockReturnValue({

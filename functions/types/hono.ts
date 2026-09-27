@@ -20,11 +20,7 @@ export interface AudioCacheLookupResult {
   storedBr: number;
 }
 
-export type AudioCacheJobState =
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed";
+export type AudioCacheJobState = "queued" | "running" | "completed" | "failed";
 
 export interface AudioCacheJobStatus {
   jobId: string;
@@ -39,6 +35,16 @@ export interface AudioCacheJobStatus {
   error?: string;
 }
 
+export interface AudioCacheNeteaseTrack {
+  id: string;
+  urlId?: string;
+  name: string;
+  artist: string[];
+  duration?: number;
+}
+
+export type AudioCacheTrackState = "cached" | "pending" | "queued";
+
 export interface AudioCacheLike {
   lookup(
     track: AudioCacheTrackReference
@@ -48,6 +54,10 @@ export interface AudioCacheLike {
     playlistId: string,
     credential: string
   ): Promise<AudioCacheJobStatus>;
+  cacheNeteaseTrack(
+    track: AudioCacheNeteaseTrack,
+    credential: string
+  ): Promise<AudioCacheTrackState>;
   getJob(jobId: string): Promise<AudioCacheJobStatus | null>;
 }
 

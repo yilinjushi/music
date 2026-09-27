@@ -541,8 +541,8 @@ async function expectNoSeriousA11yViolations(page: Page) {
 }
 
 for (const corePage of [
-  { path: "/search", readyText: "发现" },
-  { path: "/mine", readyText: "我的歌单" },
+  { path: "/search", readyText: "搜索" },
+  { path: "/mine", readyText: "本地歌单" },
   { path: "/settings", readyText: "系统设置" },
 ]) {
   test(`${corePage.path} passes mobile a11y, overflow, and touch-target checks`, async ({
@@ -658,7 +658,7 @@ test("keyboard focus reaches the primary navigation", async ({ page }) => {
         active?.getAttribute("aria-label") || active?.textContent?.trim() || ""
       );
     });
-    if (["发现", "喜欢", "我的"].includes(activeLabel)) return;
+    if (["红心", "搜索", "我的"].includes(activeLabel)) return;
   }
   throw new Error(
     "Primary navigation was not keyboard reachable within 16 tabs"
@@ -681,7 +681,7 @@ test("200% browser zoom keeps primary controls usable", async ({
     await expect(
       page.getByPlaceholder("搜索音乐、歌手或专辑...")
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "发现" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "搜索" })).toBeVisible();
     await expectNoHorizontalOverflow(page);
   } finally {
     await session.send("Emulation.setPageScaleFactor", { pageScaleFactor: 1 });

@@ -3,6 +3,7 @@ import type { MusicTrack } from "@/types/music";
 import {
   getAudioCacheJob,
   lookupAudioCache,
+  requestNeteaseTrackCache,
   startNeteasePlaylistCache,
 } from "./audio-cache";
 
@@ -74,5 +75,25 @@ describe("audio cache client", () => {
     expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
       `/jobs/${job.jobId}`
     );
+  });
+
+  it("asks the server to cache a played NetEase track once per session", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(Response.json({ state: "queued" }, { status: 202 }));
+    const played = { ...track, id: "456", url_id: "456" };
+
+    requestNeteaseTrackCache(played);
+    requestNeteaseTrackCache(played);
+    requestNeteaseTrackCache({ ...played, id: "789", source: "kuwo" });
+    await Promise.resolve();
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/music-api/cache/netease-track");
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      id: "456",
+      name: "Song",
+      artist: ["Artist"],
+    });
   });
 });

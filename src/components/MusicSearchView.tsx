@@ -32,12 +32,6 @@ const MusicTrackList = lazy(() =>
   }))
 );
 
-const PlaylistMarket = lazy(() =>
-  import("./PlaylistMarket/PlaylistMarket").then((module) => ({
-    default: module.PlaylistMarket,
-  }))
-);
-
 const SearchSuggestions = lazy(() =>
   import("./SearchSuggestions").then((module) => ({
     default: module.SearchSuggestions,
@@ -453,22 +447,9 @@ export function MusicSearchView({
       {/* 列表区域 */}
       <div className="flex-1 min-h-0">
         {!searchQuery.trim() ? (
-          <Suspense
-            fallback={
-              <div
-                className="flex h-full items-center justify-center"
-                role="status"
-                aria-label="正在加载歌单广场"
-              >
-                <Loader2
-                  aria-hidden="true"
-                  className="h-5 w-5 animate-spin text-primary"
-                />
-              </div>
-            }
-          >
-            <PlaylistMarket />
-          </Suspense>
+          <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
+            输入歌名、歌手或专辑，搜索网易云音乐
+          </div>
         ) : (
           <div
             ref={resultsScrollRef}

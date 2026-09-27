@@ -254,7 +254,7 @@ function useMineData() {
 function LoginPrompt() {
   const navigate = useNavigate();
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground space-y-4">
+    <div className="flex flex-col items-center justify-center py-8 text-muted-foreground space-y-4">
       <p className="text-sm">请先登录网易云账号以查看歌单</p>
       <Button variant="outline" size="sm" onClick={() => navigate("/settings")}>
         前往设置
@@ -314,7 +314,7 @@ const AlbumGrid = ({
   </div>
 );
 
-export function MineSection() {
+export function MineSection({ embedded = false }: { embedded?: boolean } = {}) {
   const navigate = useNavigate();
   const {
     mineTab,
@@ -428,7 +428,7 @@ export function MineSection() {
   const isDataReady = !!mineData[mineTab as keyof typeof mineData];
 
   return (
-    <div className="p-4 pb-bottom-stack space-y-6">
+    <div className={embedded ? "space-y-4" : "p-4 pb-bottom-stack space-y-6"}>
       <div
         className={cn(
           "flex items-center justify-between mb-4 px-1 relative",
@@ -442,7 +442,7 @@ export function MineSection() {
               key={tab.id}
               onClick={() => setMineTab(tab.id)}
               className={cn(
-                "min-h-11 text-[15px] transition-all whitespace-nowrap",
+                "min-h-11 min-w-11 text-[15px] transition-all whitespace-nowrap",
                 mineTab === tab.id
                   ? "font-bold text-foreground tracking-wide"
                   : "font-medium text-muted-foreground hover:text-foreground"
