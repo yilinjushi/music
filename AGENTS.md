@@ -75,4 +75,10 @@ useEffect(() => {
 - 修改播放、同步、Store、路由、PWA 或认证逻辑时补充相应 Vitest/Playwright 覆盖。
 - E2E 使用稳定的同源 mock；测试会话仅代表模拟状态，不得描述成真实账号。
 - E2E 需监控未处理页面错误、非预期 console error、失败请求和 5xx 响应。
-- 保留用户未提交的修改，避免覆盖并行任务；不要提交或推送，除非任务明确授权。
+- 保留用户未提交的修改，避免覆盖并行任务。
+
+## 发布流程（个人测试项目）
+
+- 直接在 `main` 上开发、提交并推送，不开 PR、不需要人工审核。
+- 推送到 `main` 即自动部署到 Cloudflare Pages（部署不等待质量检查，检查并行运行只做报告）；部署期间短暂中断可以接受。
+- 推送前至少跑 `npm run typecheck`、`npm run typecheck:functions` 和相关单元测试；禁止 force push。
