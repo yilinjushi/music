@@ -106,7 +106,7 @@ export function MinePage({ onSelectPlaylist }: MinePageProps) {
             onClick={() => navigate(path)}
             className="flex flex-col items-center gap-1.5 py-2 rounded-xl hover:bg-muted/50 transition-colors"
           >
-            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 flex-[0_0_40px] min-w-10 min-h-10">
+            <div className="h-10 w-10 border border-foreground flex items-center justify-center shrink-0 flex-[0_0_40px] min-w-10 min-h-10">
               <div className="h-5 w-5 shrink-0 flex-[0_0_20px] min-w-5 min-h-5">
                 <Icon size={20} className="h-full w-full text-primary" />
               </div>
@@ -119,7 +119,7 @@ export function MinePage({ onSelectPlaylist }: MinePageProps) {
       <section aria-labelledby="netease-mine-title" className="mb-6">
         <h2
           id="netease-mine-title"
-          className="mb-3 px-1 text-base font-semibold text-foreground"
+          className="mb-3 border-b-2 border-foreground pb-1 text-xl text-foreground"
         >
           网易云
         </h2>
@@ -127,8 +127,8 @@ export function MinePage({ onSelectPlaylist }: MinePageProps) {
       </section>
 
       {/* 标题栏 */}
-      <div className="flex items-center justify-between mb-3 px-1">
-        <h2 className="text-base font-semibold text-foreground">本地歌单</h2>
+      <div className="flex items-center justify-between mb-3 border-b-2 border-foreground pb-1">
+        <h2 className="text-xl text-foreground">本地歌单</h2>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"

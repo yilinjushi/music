@@ -32,7 +32,7 @@ export function MusicTabBar() {
   const activeTab = getActiveTab(location.pathname);
 
   return (
-    <nav className="flex min-h-(--tab-bar-safe-height) items-start justify-around bg-card/95 backdrop-blur-xl border-t border-border/50 px-2 pt-2 pb-[calc(0.5rem+var(--safe-area-bottom))]">
+    <nav className="flex min-h-(--tab-bar-safe-height) items-start justify-around bg-background border-t-2 border-foreground px-2 pt-2 pb-[calc(0.5rem+var(--safe-area-bottom))]">
       {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         const Icon = tab.icon;

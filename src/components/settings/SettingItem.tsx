@@ -29,10 +29,7 @@ export function SettingItem({
 }: SettingItemProps) {
   return (
     <div
-      className={cn(
-        "p-4 rounded-xl bg-card/50 border border-border/50 transition-colors",
-        className
-      )}
+      className={cn("py-3 border-b border-border transition-colors", className)}
     >
       <div
         className={cn(
@@ -54,7 +51,7 @@ export function SettingItem({
         }
       >
         <div className="flex items-center gap-3 flex-1 overflow-hidden">
-          <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 flex-[0_0_36px] min-w-9 min-h-9">
+          <div className="h-9 w-9 flex items-center justify-center shrink-0 flex-[0_0_36px] min-w-9 min-h-9">
             <div className="h-4 w-4 shrink-0 flex-[0_0_16px] min-w-4 min-h-4">
               <Icon size={16} className="h-full w-full text-primary" />
             </div>

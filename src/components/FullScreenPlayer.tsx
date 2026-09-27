@@ -74,9 +74,8 @@ const BackgroundLayer = memo(
         "--bg-h": h,
         "--bg-s": `${s}%`,
         "--bg-l": `${l}%`,
-        background: `linear-gradient(to bottom,
-        hsl(var(--bg-h), var(--bg-s), var(--bg-l)),
-        hsl(var(--bg-h), var(--bg-s), calc(var(--bg-l) - 8%)))`,
+        // Flat colour field, no gradient: modernist poster look.
+        background: "hsl(var(--bg-h), var(--bg-s), calc(var(--bg-l) - 8%))",
       } as React.CSSProperties;
     }, [hslColor, showThemeColor]);
 
@@ -106,8 +105,7 @@ const BackgroundLayer = memo(
               className="absolute inset-[-32px] h-[calc(100%+64px)] w-[calc(100%+64px)] object-cover blur-3xl scale-110"
             />
           )}
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="absolute inset-0 bg-linear-to-b from-black/10 via-zinc-950/20 to-black/60" />
+          <div className="absolute inset-0 bg-black/70" />
         </div>
 
         {/* 兜底背景层 */}
@@ -117,18 +115,9 @@ const BackgroundLayer = memo(
             showThemeColor || showCoverMask ? "opacity-0" : "opacity-100"
           )}
         >
-          <div className="absolute inset-0 bg-linear-to-b from-zinc-900 via-zinc-950 to-black" />
-          <div
-            className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-2xl h-[60vh] opacity-30 pointer-events-none"
-            style={{
-              background:
-                "radial-gradient(circle at 50% 0%, rgba(255,255,255,0.08) 0%, transparent 70%)",
-            }}
-          />
+          <div className="absolute inset-0 bg-black" />
+          <div className="absolute left-0 top-0 h-full w-2 bg-primary" />
         </div>
-
-        {/* 噪点层 */}
-        <div className="absolute inset-0 opacity-[0.02] mix-blend-overlay pointer-events-none select-none bg-[url('data:image/svg+xml,...')]" />
       </div>
     );
   }
@@ -337,14 +326,6 @@ export function FullScreenPlayer({
               "relative aspect-square w-72 max-w-[320px] overflow-hidden rounded-3xl transition-transform duration-500 ring-1 ring-white/5",
               isPlaying ? "scale-100" : "scale-[0.95]"
             )}
-            style={{
-              boxShadow:
-                fullScreenBackgroundMode === "theme" && hslColor
-                  ? `0 30px 60px -12px hsla(${hslColor[0]}, ${
-                      hslColor[1]
-                    }%, ${Math.max(0, hslColor[2] - 20)}%, 0.4)`
-                  : "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-            }}
           >
             <MusicCover
               src={coverUrl}
