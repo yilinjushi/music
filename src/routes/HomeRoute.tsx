@@ -138,6 +138,7 @@ export function HomeRoute() {
       isPlaying={isPlaying}
       refreshKey={refreshKey}
       hiddenTrackIds={hiddenTrackIds}
+      compact
     />
   );
 }

@@ -1,4 +1,5 @@
 import React, {
+  ReactNode,
   RefObject,
   useEffect,
   useMemo,
@@ -57,7 +58,7 @@ import { downloadMusicTrackBatch } from "@/lib/utils/download";
 import { useMusicStore } from "@/store/music-store";
 import { MusicTrack } from "@/types/music";
 import toast from "react-hot-toast";
-import { processBatchCPU } from "@/lib/utils";
+import { cn, processBatchCPU } from "@/lib/utils";
 import { useShallow } from "zustand/react/shallow";
 import {
   getTrackIdentityKey,
@@ -84,6 +85,10 @@ interface MusicTrackListProps {
   showItemRemove?: boolean;
   preselectedKeys?: Set<string>;
   onSelectionModeChange?: (active: boolean) => void;
+  /** Replaces the "# 标题" column labels with a custom compact header. */
+  headerLead?: ReactNode;
+  /** Extra buttons shown before the multi-select button in the header. */
+  headerActions?: ReactNode;
 }
 
 const ROW_HEIGHT = 60;
@@ -142,6 +147,8 @@ export function MusicTrackList({
   showItemRemove = true,
   preselectedKeys,
   onSelectionModeChange,
+  headerLead,
+  headerActions,
 }: MusicTrackListProps) {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
@@ -308,22 +315,37 @@ export function MusicTrackList({
 
   const renderHeader = () => (
     <div className="sticky top-0 z-20 border-b bg-background backdrop-blur">
-      <div className="grid items-center gap-4 px-4 h-10 text-xs text-muted-foreground grid-cols-[1.75rem_1fr_auto]">
+      <div
+        className={cn(
+          "grid items-center gap-4 px-4 text-muted-foreground",
+          headerLead && !isSelectionMode
+            ? "h-16 grid-cols-[1fr_auto]"
+            : "h-10 text-xs grid-cols-[1.75rem_1fr_auto]"
+        )}
+      >
         {!isSelectionMode ? (
           <>
-            <div className="text-center">#</div>
-            <div>标题</div>
-            <div className="flex justify-end gap-1">
+            {headerLead ?? (
+              <>
+                <div className="text-center">#</div>
+                <div>标题</div>
+              </>
+            )}
+            <div className="flex items-center justify-end gap-1">
+              {headerActions}
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className={headerLead ? "h-11 w-11" : "h-7 w-7"}
+                aria-label="多选"
                 onClick={() => {
                   setIsSelectionMode(true);
                   onSelectionModeChange?.(true);
                 }}
               >
-                <ListChecks className="h-3.5 w-3.5" />
+                <ListChecks
+                  className={headerLead ? "h-6 w-6" : "h-3.5 w-3.5"}
+                />
               </Button>
             </div>
           </>

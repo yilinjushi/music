@@ -24,7 +24,11 @@ import {
   Bookmark,
   ListMusic,
   Download,
+  Play,
+  Search,
+  X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import toast from "react-hot-toast";
 import { writeClipboardText } from "@/lib/clipboard";
 import {
@@ -67,6 +71,8 @@ interface NeteaseDetailProps {
   refreshKey?: number;
   /** NetEase song ids with no playable source; hidden from the list. */
   hiddenTrackIds?: ReadonlySet<string>;
+  /** Home 红心 layout: no page title bar, one compact header row. */
+  compact?: boolean;
 }
 
 interface UnifiedDetail {
@@ -95,6 +101,7 @@ export function NeteaseDetail({
   isPlaying,
   refreshKey = 0,
   hiddenTrackIds,
+  compact = false,
 }: NeteaseDetailProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -105,6 +112,7 @@ export function NeteaseDetail({
   const loadingMoreRef = useRef(false);
   const autoLoadFailedRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [cacheStatus, setCacheStatus] = useState<PlaylistCacheStatus | null>(
     null
   );
@@ -482,10 +490,14 @@ export function NeteaseDetail({
           <Button
             variant="ghost"
             size="icon"
-            className="text-muted-foreground hover:text-foreground"
             aria-label="更多详情操作"
+            className={
+              compact
+                ? "h-11 w-11 text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }
           >
-            <MoreVertical className="w-5 h-5" />
+            <MoreVertical className={compact ? "h-6 w-6" : "w-5 h-5"} />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
@@ -512,6 +524,93 @@ export function NeteaseDetail({
     </div>
   );
 
+  const trackList = (
+    headerLead?: React.ReactNode,
+    headerActions?: React.ReactNode
+  ) => (
+    <MusicTrackList
+      tracks={filteredTracks}
+      scrollContainerRef={scrollRef}
+      onPlay={(track) => onPlay(track, visibleTracks)}
+      currentTrackKey={currentTrackKey}
+      isPlaying={isPlaying}
+      emptyMessage="列表为空"
+      onLoadMore={
+        type === "artist" || type === "playlist" ? handleLoadMore : undefined
+      }
+      hasMore={hasMore}
+      loading={loading || loadingMore}
+      headerLead={headerLead}
+      headerActions={headerActions}
+    />
+  );
+
+  if (compact && !loading && !error && detail) {
+    const total = detail.trackCount;
+    const cached = cacheStatus?.ready ?? 0;
+    const playAll = () => {
+      if (visibleTracks.length === 0) return;
+      const index = isShuffle
+        ? Math.floor(Math.random() * visibleTracks.length)
+        : 0;
+      onPlay(visibleTracks[index], visibleTracks);
+    };
+    const headerLead = searchOpen ? (
+      <Input
+        autoFocus
+        placeholder="搜索红心"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        className="h-11 text-base"
+      />
+    ) : (
+      <div className="flex min-w-0 items-center gap-3">
+        <Button
+          size="icon"
+          className="h-12 w-12 shrink-0"
+          onClick={playAll}
+          aria-label="播放全部"
+        >
+          <Play className="h-6 w-6 fill-current" />
+        </Button>
+        <span className="truncate text-lg font-bold tabular-nums text-foreground">
+          {cached}/{total}
+          <span className="ml-1 text-sm font-normal text-muted-foreground">
+            （缓存）
+          </span>
+        </span>
+      </div>
+    );
+    const headerActions = (
+      <>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-11 w-11 text-foreground"
+          onClick={() => {
+            if (searchOpen) setSearchQuery("");
+            setSearchOpen(!searchOpen);
+          }}
+          aria-label={searchOpen ? "关闭搜索" : "搜索"}
+        >
+          {searchOpen ? (
+            <X className="h-6 w-6" />
+          ) : (
+            <Search className="h-6 w-6" />
+          )}
+        </Button>
+        {action}
+      </>
+    );
+    return (
+      <div ref={scrollRef} className="h-full overflow-y-auto custom-scrollbar">
+        <div className="pb-bottom-stack">
+          {trackList(headerLead, headerActions)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <GenericDetailPage
       loading={loading}
@@ -532,38 +631,7 @@ export function NeteaseDetail({
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
     >
-      {authenticated && type === "playlist" && detail && (
-        <div className="mx-4 mb-2 border-l-4 border-primary px-3 py-1">
-          <div className="text-base font-bold text-foreground">
-            缓存 {cacheStatus?.ready ?? 0} / {detail.trackCount} 首
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {uncachedCount === 0
-              ? "已全部缓存"
-              : `还有 ${uncachedCount ?? detail.trackCount} 首未缓存（后台分批进行中）`}
-            {cacheStatus &&
-              cacheStatus.unavailable.length > 0 &&
-              `，无音源已隐藏 ${cacheStatus.unavailable.length} 首`}
-          </div>
-        </div>
-      )}
-      <div className="flex-1 min-h-0">
-        <MusicTrackList
-          tracks={filteredTracks}
-          scrollContainerRef={scrollRef}
-          onPlay={(track) => onPlay(track, visibleTracks)}
-          currentTrackKey={currentTrackKey}
-          isPlaying={isPlaying}
-          emptyMessage="列表为空"
-          onLoadMore={
-            type === "artist" || type === "playlist"
-              ? handleLoadMore
-              : undefined
-          }
-          hasMore={hasMore}
-          loading={loading || loadingMore}
-        />
-      </div>
+      <div className="flex-1 min-h-0">{trackList()}</div>
       <ArtistAlbumSheet
         artistId={id}
         isOpen={isAlbumSheetOpen}
