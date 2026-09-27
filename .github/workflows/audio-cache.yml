@@ -20,13 +20,22 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    # GitHub often delays or skips scheduled runs, so each run keeps working
+    # batch after batch (fresh OIDC token each time) until the playlist is
+    # complete or ~5.5 hours pass.
+    timeout-minutes: 350
     steps:
-      - name: Trigger bounded sync
+      - name: Sync until complete
         run: |
-          TOKEN=$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=music-audio-cache" | jq -r .value)
-          curl -sS --fail-with-body --max-time 90 -X POST \
-            -H "Authorization: Bearer $TOKEN" \
-            https://music.80007001.xyz/cron/audio-cache
-          echo
+          END=$(( $(date +%s) + 330 * 60 ))
+          while [ "$(date +%s)" -lt "$END" ]; do
+            TOKEN=$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=music-audio-cache" | jq -r .value)
+            BODY=$(curl -sS --max-time 90 -X POST \
+              -H "Authorization: Bearer $TOKEN" \
+              https://music.80007001.xyz/cron/audio-cache || echo '{}')
+            echo "$(date -u +%H:%M:%S) $BODY"
+            STATE=$(echo "$BODY" | jq -r '.state // empty' 2>/dev/null || true)
+            if [ "$STATE" = "complete" ] || [ "$STATE" = "idle" ]; then break; fi
+            sleep 40
+          done
