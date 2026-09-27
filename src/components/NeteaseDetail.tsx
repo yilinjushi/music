@@ -532,14 +532,19 @@ export function NeteaseDetail({
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
     >
-      {cacheStatus && type === "playlist" && (
-        <div className="mx-4 mb-2 border-l-4 border-primary px-3 py-1 text-sm text-muted-foreground">
-          已缓存 {cacheStatus.ready} 首
-          {uncachedCount
-            ? `，还有 ${uncachedCount} 首未缓存（后台分批进行中）`
-            : "，已全部缓存"}
-          {cacheStatus.unavailable.length > 0 &&
-            `，无音源已隐藏 ${cacheStatus.unavailable.length} 首`}
+      {authenticated && type === "playlist" && detail && (
+        <div className="mx-4 mb-2 border-l-4 border-primary px-3 py-1">
+          <div className="text-base font-bold text-foreground">
+            缓存 {cacheStatus?.ready ?? 0} / {detail.trackCount} 首
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {uncachedCount === 0
+              ? "已全部缓存"
+              : `还有 ${uncachedCount ?? detail.trackCount} 首未缓存（后台分批进行中）`}
+            {cacheStatus &&
+              cacheStatus.unavailable.length > 0 &&
+              `，无音源已隐藏 ${cacheStatus.unavailable.length} 首`}
+          </div>
         </div>
       )}
       <div className="flex-1 min-h-0">
