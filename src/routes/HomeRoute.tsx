@@ -16,6 +16,7 @@ import {
 
 const HOME_PLAYLIST_ID = "neplaylist_366135532";
 const HOME_REFRESH_AFTER_MS = 30_000;
+const HOME_SYNC_DELAY_MS = 20_000;
 
 function HomeLoginGate() {
   return (
@@ -108,13 +109,20 @@ export function HomeRoute() {
   useEffect(() => {
     if (sessionState !== "authenticated") return;
     const controller = new AbortController();
-    requestNeteasePlaylistSync(HOME_PLAYLIST_ID);
+    // Let the list load first so background work never competes with it.
+    const syncTimer = window.setTimeout(
+      () => requestNeteasePlaylistSync(HOME_PLAYLIST_ID),
+      HOME_SYNC_DELAY_MS
+    );
     void getUnavailableTrackIds(HOME_PLAYLIST_ID, controller.signal).then(
       (ids) => {
         if (!controller.signal.aborted) setHiddenTrackIds(new Set(ids));
       }
     );
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.clearTimeout(syncTimer);
+    };
   }, [sessionState, refreshKey]);
 
   if (sessionState === "checking") return <PageLoader />;

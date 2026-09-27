@@ -49,10 +49,12 @@ import {
   normalizeNeteaseDetailCover,
 } from "@/lib/netease/netease-detail-import";
 import {
-  getAudioCacheJob,
-  startNeteasePlaylistCache,
-  type AudioCacheJobStatus,
+  getPlaylistCacheStatus,
+  requestNeteasePlaylistSync,
+  type PlaylistCacheStatus,
 } from "@/lib/audio-cache";
+
+const LOAD_MORE_RETRY_DELAYS_MS = [1_500, 4_000];
 
 interface NeteaseDetailProps {
   id: string | null;
@@ -101,9 +103,11 @@ export function NeteaseDetail({
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
+  const autoLoadFailedRef = useRef(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [cacheJob, setCacheJob] = useState<AudioCacheJobStatus | null>(null);
-  const cacheTerminalNotifiedRef = useRef<string | null>(null);
+  const [cacheStatus, setCacheStatus] = useState<PlaylistCacheStatus | null>(
+    null
+  );
 
   const createPlaylist = useMusicStore((state) => state.createPlaylist);
   const isShuffle = useMusicStore((state) => state.isShuffle);
@@ -206,55 +210,23 @@ export function NeteaseDetail({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, detail]);
 
+  // Background cache progress (the server syncs in bounded steps; this only
+  // reads its latest status).
   useEffect(() => {
-    setCacheJob(null);
-    cacheTerminalNotifiedRef.current = null;
-  }, [id, type]);
-
-  useEffect(() => {
-    const jobId = cacheJob?.jobId;
-    if (
-      !jobId ||
-      cacheJob?.state === "completed" ||
-      cacheJob?.state === "failed"
-    ) {
-      return;
-    }
-
+    setCacheStatus(null);
+    if (!id || type !== "playlist" || !authenticated) return;
     let cancelled = false;
     const poll = async () => {
-      try {
-        const next = await getAudioCacheJob(jobId);
-        if (cancelled) return;
-        setCacheJob(next);
-        if (
-          (next.state === "completed" || next.state === "failed") &&
-          cacheTerminalNotifiedRef.current !== next.jobId
-        ) {
-          cacheTerminalNotifiedRef.current = next.jobId;
-          if (next.state === "completed") {
-            toast.success(
-              `云端缓存完成：成功 ${next.cached}，跳过 ${next.skipped}，失败 ${next.failed}`,
-              { duration: 6000 }
-            );
-          } else {
-            toast.error(next.error || "云端缓存任务失败", { duration: 6000 });
-          }
-        }
-      } catch (error) {
-        if (!cancelled) {
-          logger.warn("NeteaseDetail", "Audio cache polling failed", error);
-        }
-      }
+      const next = await getPlaylistCacheStatus(id);
+      if (!cancelled && next) setCacheStatus(next);
     };
-
     void poll();
-    const timer = window.setInterval(() => void poll(), 2000);
+    const timer = window.setInterval(() => void poll(), 15_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [cacheJob?.jobId, cacheJob?.state]);
+  }, [id, type, authenticated]);
 
   const onHeaderBack = () => {
     handleBack(onBack);
@@ -284,19 +256,10 @@ export function NeteaseDetail({
     }
   };
 
-  const handleCachePlaylist = async () => {
+  const handleCachePlaylist = () => {
     if (!id || type !== "playlist" || !authenticated) return;
-    try {
-      const job = await startNeteasePlaylistCache(id);
-      cacheTerminalNotifiedRef.current = null;
-      setCacheJob(job);
-      toast.success("已启动云端缓存任务，页面可继续使用");
-    } catch (error) {
-      toast.error("无法启动云端缓存任务");
-      logger.error("NeteaseDetail", "Start audio cache failed", error, {
-        type,
-      });
-    }
+    requestNeteasePlaylistSync(id);
+    toast.success("已在后台继续缓存，会自动分批完成");
   };
 
   const handleToggleAlbumSub = async () => {
@@ -365,10 +328,23 @@ export function NeteaseDetail({
     loadingMoreRef.current = true;
     try {
       if (type === "playlist") {
-        const res = await getPlaylistDetail(id, "", undefined, {
-          offset,
-          limit: NETEASE_PLAYLIST_PAGE_SIZE,
-        });
+        // NetEase occasionally rejects a page under load; retry with backoff
+        // before surfacing an error.
+        let res: Awaited<ReturnType<typeof getPlaylistDetail>> | undefined;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            res = await getPlaylistDetail(id, "", undefined, {
+              offset,
+              limit: NETEASE_PLAYLIST_PAGE_SIZE,
+            });
+            break;
+          } catch (error) {
+            if (attempt >= LOAD_MORE_RETRY_DELAYS_MS.length) throw error;
+            await new Promise((resolve) =>
+              setTimeout(resolve, LOAD_MORE_RETRY_DELAYS_MS[attempt])
+            );
+          }
+        }
         const newTracks =
           res?.tracks?.map((s) => convertSongToMusicTrack(s)) ?? [];
         const nextOffset =
@@ -406,6 +382,8 @@ export function NeteaseDetail({
         setHasMore(false);
       }
     } catch (err) {
+      // Stop the automatic page chain; the user can still retry manually.
+      autoLoadFailedRef.current = true;
       toast.error("加载更多失败");
       logger.error("NeteaseDetail", "Load more artist songs failed", err, {
         id,
@@ -417,6 +395,25 @@ export function NeteaseDetail({
       setLoadingMore(false);
     }
   };
+
+  // Playlists load every page automatically so the full list (and play
+  // queue) is available without scrolling to "加载更多".
+  useEffect(() => {
+    autoLoadFailedRef.current = false;
+  }, [id, refreshKey]);
+  useEffect(() => {
+    if (
+      type !== "playlist" ||
+      !hasMore ||
+      loading ||
+      loadingMore ||
+      autoLoadFailedRef.current
+    ) {
+      return;
+    }
+    void handleLoadMore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type, hasMore, loading, loadingMore, offset]);
 
   const genericDetail: GenericDetailData | undefined = detail
     ? {
@@ -481,15 +478,13 @@ export function NeteaseDetail({
             导入歌单
           </DropdownMenuItem>
           {authenticated && type === "playlist" && (
-            <DropdownMenuItem
-              onClick={handleCachePlaylist}
-              disabled={
-                cacheJob?.state === "queued" || cacheJob?.state === "running"
-              }
-            >
+            <DropdownMenuItem onClick={handleCachePlaylist}>
               <Download className="w-4 h-4 mr-2" />
-              {cacheJob?.state === "queued" || cacheJob?.state === "running"
-                ? `缓存中 ${cacheJob.processed}/${cacheJob.total || "准备"}`
+              {cacheStatus
+                ? cacheStatus.ready + cacheStatus.unavailable.length >=
+                  cacheStatus.total
+                  ? `已全部缓存 ${cacheStatus.ready}/${cacheStatus.total}`
+                  : `缓存中 ${cacheStatus.ready}/${cacheStatus.total}`
                 : "缓存到云端"}
             </DropdownMenuItem>
           )}
@@ -518,11 +513,15 @@ export function NeteaseDetail({
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
     >
-      {cacheJob && type === "playlist" && (
-        <div className="mx-4 mb-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-          云端缓存：{cacheJob.processed}/{cacheJob.total || "准备中"}，成功{" "}
-          {cacheJob.cached}，失败 {cacheJob.failed}
-          {cacheJob.state === "completed" && "（已完成）"}
+      {cacheStatus && type === "playlist" && (
+        <div className="mx-4 mb-2 border-l-4 border-primary px-3 py-1 text-sm text-muted-foreground">
+          云端缓存 {cacheStatus.ready}/{cacheStatus.total}
+          {cacheStatus.unavailable.length > 0 &&
+            `，无音源已隐藏 ${cacheStatus.unavailable.length}`}
+          {cacheStatus.ready + cacheStatus.unavailable.length >=
+          cacheStatus.total
+            ? "（已全部完成）"
+            : "（后台分批进行中）"}
         </div>
       )}
       <div className="flex-1 min-h-0">

@@ -724,14 +724,14 @@ describe("NetEase session routes", () => {
       body: JSON.stringify({ playlistId: "7" }),
     };
 
-    for (let index = 0; index < 12; index += 1) {
+    for (let index = 0; index < 30; index += 1) {
       const response = await neteaseRoutes.request("/playlist", init, env);
       expect(response.status).toBe(200);
     }
     const blocked = await neteaseRoutes.request("/playlist", init, env);
     expect(blocked.status).toBe(429);
     expect(blocked.headers.get("retry-after")).toBeTruthy();
-    expect(api.getPlaylistDetail).toHaveBeenCalledTimes(12);
+    expect(api.getPlaylistDetail).toHaveBeenCalledTimes(30);
 
     const unavailableEnv = {
       ...createEnv(),

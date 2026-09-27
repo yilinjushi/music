@@ -439,7 +439,7 @@ async function playlistRateLimit(c: NeteaseContext): Promise<Response | null> {
       c.env.oh_file_url,
       "netease-playlist",
       requestClientId(c.req.raw.headers),
-      12,
+      30,
       60
     );
     c.header("X-RateLimit-Remaining", String(rate.remaining));

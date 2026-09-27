@@ -197,3 +197,50 @@ export async function getUnavailableTrackIds(
     return [];
   }
 }
+
+export interface PlaylistCacheStatus {
+  total: number;
+  ready: number;
+  pending: number;
+  unavailable: string[];
+  updatedAt: number;
+}
+
+/** Latest progress of the background cache sync for a playlist. */
+export async function getPlaylistCacheStatus(
+  playlistId: string,
+  signal?: AbortSignal
+): Promise<PlaylistCacheStatus | null> {
+  try {
+    const response = await fetchWithTimeout(
+      `${CACHE_PREFIX}/playlist-status?playlistId=${encodeURIComponent(playlistId)}`,
+      { credentials: "include", cache: "no-store", signal },
+      5_000
+    );
+    if (!response.ok) return null;
+    const payload = (await response
+      .json()
+      .catch(() => null)) as Partial<PlaylistCacheStatus> | null;
+    if (
+      !payload ||
+      typeof payload.total !== "number" ||
+      typeof payload.ready !== "number"
+    ) {
+      return null;
+    }
+    return {
+      total: payload.total,
+      ready: payload.ready,
+      pending: typeof payload.pending === "number" ? payload.pending : 0,
+      unavailable: Array.isArray(payload.unavailable)
+        ? payload.unavailable.filter(
+            (id): id is string =>
+              typeof id === "string" && /^\d{1,20}$/.test(id)
+          )
+        : [],
+      updatedAt: typeof payload.updatedAt === "number" ? payload.updatedAt : 0,
+    };
+  } catch {
+    return null;
+  }
+}
