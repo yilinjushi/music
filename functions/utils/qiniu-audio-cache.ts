@@ -603,6 +603,35 @@ async function submitQiniuFetch(
   return typeof result?.id === "string" && result.id.length > 0;
 }
 
+/**
+ * Best complete NetEase source at or below `maxBr` kbps. NetEase returns the
+ * highest quality it can grant for the request, so one call covers the
+ * 320 -> 192 -> 128 ladder; the actual bitrate is reported back.
+ */
+async function resolveNeteaseSource(
+  track: QiniuPlaylistTrack,
+  maxBr: number,
+  credential: string
+): Promise<{ url: string; br: number } | null> {
+  try {
+    const result = await getSongUrl(track.id, maxBr * 1000, credential);
+    const entry = result?.data?.data?.[0] as
+      { url?: unknown; br?: unknown; freeTrialInfo?: unknown } | undefined;
+    const url = entry?.url;
+    if (!url || typeof url !== "string" || url.length > 4096) return null;
+    if (entry?.freeTrialInfo) return null;
+    const normalized = normalizeCacheSourceUrl(url);
+    if (!normalized) return null;
+    const actual =
+      typeof entry?.br === "number" && entry.br > 0
+        ? Math.round(entry.br / 1000)
+        : maxBr;
+    return { url: normalized, br: Math.min(actual, maxBr) };
+  } catch {
+    return null;
+  }
+}
+
 async function resolveNeteaseUrl(
   track: QiniuPlaylistTrack,
   br: number,
@@ -905,24 +934,35 @@ class QiniuAudioCache implements AudioCacheLike {
         continue;
       }
       const objectKeyValue = objectKey(this.config, hash);
-      let source: { url: string; br: number } | null = null;
-      const neteaseUrl = await resolveNeteaseUrl(track, 320, credential);
-      if (neteaseUrl) source = { url: neteaseUrl, br: 320 };
-      if (!source && spend(4)) {
+      // Quality ladder: 320k first, then 192k, then 128k. Trial clips are
+      // rejected, so only complete songs are ever stored.
+      let source = await resolveNeteaseSource(track, 320, credential);
+      if (!source && spend(2)) {
         const alternatives = (
           await Promise.all(
             GENERIC_SOURCES.map((genericSource) =>
               genericSearch(genericSource, track)
             )
           )
-        ).flat();
-        for (const candidate of alternatives.slice(0, 2)) {
-          if (candidate.source !== "joox" && candidate.source !== "kuwo")
-            continue;
-          const url = await genericUrl(candidate.source, candidate.urlId, 320);
-          if (url) {
-            source = { url, br: 320 };
-            break;
+        )
+          .flat()
+          .filter(
+            (candidate) =>
+              candidate.source === "joox" || candidate.source === "kuwo"
+          );
+        const best = alternatives[0];
+        if (best) {
+          for (const br of CACHE_QUALITIES) {
+            if (!spend(1)) break;
+            const url = await genericUrl(
+              best.source as GenericSource,
+              best.urlId,
+              br
+            );
+            if (url) {
+              source = { url, br };
+              break;
+            }
           }
         }
       }

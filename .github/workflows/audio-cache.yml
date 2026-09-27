@@ -1,7 +1,9 @@
 name: Audio cache sync
 
 # Every 10 minutes, ask the site to cache the next batch of 红心 songs into
-# Qiniu. Each call is bounded (~20s); repeated calls work through the list.
+# Qiniu. Each call is bounded (~20s, <=40 subrequests) so it stays inside the
+# Cloudflare free plan; repeated calls work through the whole list.
+# Authenticates with this repository's GitHub OIDC token: no secret to set.
 on:
   schedule:
     - cron: "*/10 * * * *"
@@ -9,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: audio-cache-sync
@@ -20,13 +23,10 @@ jobs:
     timeout-minutes: 3
     steps:
       - name: Trigger bounded sync
-        env:
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "CRON_SECRET is not configured; skipping."
-            exit 0
-          fi
+          TOKEN=$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=music-audio-cache" | jq -r .value)
           curl -sS --fail-with-body --max-time 90 -X POST \
-            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "Authorization: Bearer $TOKEN" \
             https://music.80007001.xyz/cron/audio-cache
+          echo

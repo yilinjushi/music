@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import type { Env } from "../types/hono";
 import { readNeteaseSessionById } from "../utils/netease-session";
+import { verifyGithubOidcToken } from "../utils/github-oidc";
+
+export const CRON_OIDC_AUDIENCE = "music-audio-cache";
 import { AUDIO_CACHE_CRON_TARGET_KEY, resolveAudioCache } from "./music";
 
 export const cronRoutes = new Hono<{ Bindings: Env }>();
@@ -15,17 +18,29 @@ function timingSafeEqual(a: string, b: string): boolean {
 
 /**
  * Scheduled audio-cache sync (GitHub Actions calls this every few minutes).
- * Authenticated with the CRON_SECRET bearer token; acts on the session and
+ * Authenticated with a GitHub Actions OIDC token (or CRON_SECRET); acts on the session and
  * playlist the owner's app last registered via /music-api/cache/netease-playlist-sync.
  */
 cronRoutes.post("/audio-cache", async (c) => {
   c.header("Cache-Control", "private, no-store, max-age=0");
-  const secret = c.env.CRON_SECRET?.trim();
   const provided = (c.req.header("Authorization") || "").replace(
     /^Bearer\s+/i,
     ""
   );
-  if (!secret || secret.length < 16 || !timingSafeEqual(provided, secret)) {
+  const secret = c.env.CRON_SECRET?.trim();
+  const secretOk =
+    !!secret && secret.length >= 16 && timingSafeEqual(provided, secret);
+  // Preferred: a GitHub Actions OIDC token from this repo's main branch, so no
+  // shared secret has to be configured anywhere.
+  const oidcOk =
+    !secretOk &&
+    provided.split(".").length === 3 &&
+    (await verifyGithubOidcToken(provided, {
+      audience: CRON_OIDC_AUDIENCE,
+      repository: "yilinjushi/music",
+      ref: "refs/heads/main",
+    }));
+  if (!secretOk && !oidcOk) {
     return c.json({ error: "Unauthorized" }, 401);
   }
   const cache = resolveAudioCache(c);
@@ -48,8 +63,10 @@ cronRoutes.post("/audio-cache", async (c) => {
       target.playlistId,
       session.credential
     );
+    const done = result.ready + result.unavailable.length;
     return c.json({
-      state: "ok",
+      // "complete": every song is either cached or confirmed sourceless.
+      state: done >= result.total ? "complete" : "ok",
       ...result,
       unavailable: result.unavailable.length,
     });
