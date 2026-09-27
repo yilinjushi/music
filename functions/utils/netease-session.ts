@@ -4,9 +4,11 @@ import type { Env } from "../types/hono";
 export const NETEASE_SESSION_COOKIE = "__Host-otter_netease_session";
 
 const SESSION_KEY_PREFIX = "netease-session:v1:";
-const DEFAULT_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
+// Chrome caps cookie lifetime at 400 days.
+const DEFAULT_SESSION_TTL_SECONDS = 400 * 24 * 60 * 60;
 const MIN_SESSION_TTL_SECONDS = 60 * 60;
-const MAX_SESSION_TTL_SECONDS = 90 * 24 * 60 * 60;
+const MAX_SESSION_TTL_SECONDS = 400 * 24 * 60 * 60;
+const SESSION_RENEW_AFTER_SECONDS = 24 * 60 * 60;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -278,6 +280,42 @@ export async function readNeteaseSession(
     await env.SESSION_KV.delete(sessionKey(id));
     return null;
   }
+}
+
+/**
+ * Sliding expiry: once a day at most, push an active session's expiry back to
+ * a full TTL so a PWA that is opened regularly stays signed in indefinitely.
+ * Returns the new cookie max-age, or null when no renewal was needed.
+ */
+export async function renewNeteaseSession(
+  env: Env,
+  cookieHeader: string | undefined,
+  now = Date.now()
+): Promise<number | null> {
+  const { hmacSecret } = requireIndependentSecrets(env);
+  const token = parseCookie(cookieHeader, NETEASE_SESSION_COOKIE);
+  if (!token) return null;
+  const id = await verifySessionToken(token, hmacSecret);
+  if (!id) return null;
+  const record = await env.SESSION_KV.get(sessionKey(id), { type: "json" });
+  if (!record || record.version !== 1) return null;
+  const stored = record as StoredNeteaseSession;
+  if (stored.expiresAt <= now) return null;
+
+  const maxAge = getSessionTtl(env);
+  const renewedExpiresAt = now + maxAge * 1000;
+  if (
+    renewedExpiresAt - stored.expiresAt <
+    SESSION_RENEW_AFTER_SECONDS * 1000
+  ) {
+    return null;
+  }
+  await env.SESSION_KV.put(
+    sessionKey(id),
+    JSON.stringify({ ...stored, expiresAt: renewedExpiresAt }),
+    { expirationTtl: maxAge }
+  );
+  return maxAge;
 }
 
 export async function deleteNeteaseSession(

@@ -41,8 +41,10 @@ export function MusicTabBar() {
             key={tab.id}
             to={tab.path}
             className={cn(
-              "flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-0.5 px-3 py-1 transition-colors",
-              isActive ? "text-primary" : "text-muted-foreground"
+              "flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-0.5 border-t-2 px-3 py-1 transition-colors",
+              isActive
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground"
             )}
             aria-label={tab.label}
           >
@@ -50,7 +52,9 @@ export function MusicTabBar() {
               className={cn("h-5 w-5 transition-all")}
               strokeWidth={isActive ? 2.5 : 2}
             />
-            <span className="text-[10px] font-medium">{tab.label}</span>
+            <span className="text-[10px] font-bold tracking-widest">
+              {tab.label}
+            </span>
           </Link>
         );
       })}

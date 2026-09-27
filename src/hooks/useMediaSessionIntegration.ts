@@ -72,13 +72,11 @@ export function useMediaSessionIntegration(
     const audio = audioRef.current;
     const syncPlaybackState = () => {
       try {
-        mediaSession.playbackState = audio
-          ? audio.paused
-            ? "paused"
-            : "playing"
-          : isPlaying
-            ? "playing"
-            : "paused";
+        // Keep reporting "playing" through the silent gap while the next
+        // track loads (ended/switching). Android may otherwise treat the PWA
+        // as idle and suspend it with the screen off before playback resumes.
+        mediaSession.playbackState =
+          isPlaying || (audio && !audio.paused) ? "playing" : "paused";
       } catch (error) {
         logger.error("MediaSession", "Failed to update playback state", error);
       }
