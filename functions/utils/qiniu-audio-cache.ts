@@ -7,6 +7,7 @@ import type {
   AudioCacheLike,
   AudioCacheLookupResult,
   AudioCacheNeteaseTrack,
+  AudioCacheSyncResult,
   AudioCacheTrackReference,
   AudioCacheTrackState,
   Env,
@@ -24,6 +25,17 @@ const JOB_KEY_PREFIX = "audio-cache-job:v1:";
 const ACTIVE_PLAYLIST_KEY_PREFIX = "audio-cache-playlist:v1:";
 const ACTIVE_TRACK_KEY_PREFIX = "audio-cache-track:v1:";
 const ACTIVE_TRACK_TTL_SECONDS = 10 * 60;
+const PENDING_KEY_PREFIX = "audio-cache-pending:v1:";
+const MISS_KEY_PREFIX = "audio-cache-miss:v1:";
+const PLAYLIST_STATUS_KEY_PREFIX = "audio-cache-playlist-status:v1:";
+// A track with no complete source is retried on later runs; after this many
+// failed rounds it is reported as unavailable (and re-checked after the TTL).
+const MISS_ROUNDS_BEFORE_UNAVAILABLE = 3;
+const MISS_TTL_SECONDS = 30 * 24 * 60 * 60;
+const PENDING_VERIFY_AFTER_MS = 20_000;
+const PENDING_GIVE_UP_AFTER_MS = 15 * 60_000;
+const SYNC_DEFAULT_TIME_BUDGET_MS = 20_000;
+const SYNC_DEFAULT_SUBREQUEST_BUDGET = 40;
 const OBJECT_KEY_PREFIX = "otter-music-cache/v1";
 const JOB_TTL_SECONDS = 24 * 60 * 60;
 const CACHE_QUALITIES = [320, 192, 128] as const;
@@ -550,6 +562,47 @@ async function waitForObject(
   return null;
 }
 
+/** One cheap existence check (a single subrequest), no polling. */
+async function probeObject(
+  config: QiniuAudioCacheConfig,
+  objectKeyValue: string
+): Promise<{ contentType: string; byteSize?: number } | null> {
+  const url = await privateDownloadUrl(config, objectKeyValue, 120);
+  const response = await fetch(url, { headers: { Range: "bytes=0-0" } }).catch(
+    () => null
+  );
+  if (!response) return null;
+  const ok = response.status === 200 || response.status === 206;
+  const byteSize = ok ? responseByteSize(response) : undefined;
+  const contentType = normalizeContentType(
+    response.headers.get("Content-Type")
+  );
+  await response.body?.cancel().catch(() => undefined);
+  if (!ok) return null;
+  return { contentType, ...(byteSize === undefined ? {} : { byteSize }) };
+}
+
+/** Submit an asynchronous Qiniu fetch without waiting for it to finish. */
+async function submitQiniuFetch(
+  config: QiniuAudioCacheConfig,
+  sourceUrl: string,
+  objectKeyValue: string
+): Promise<boolean> {
+  const result = await qiniuRequest<QiniuFetchTask>(
+    config,
+    "POST",
+    "/sisyphus/fetch",
+    JSON.stringify({
+      url: sourceUrl,
+      bucket: config.bucket,
+      key: objectKeyValue,
+      ignore_same_key: true,
+      file_type: 0,
+    })
+  ).catch(() => null);
+  return typeof result?.id === "string" && result.id.length > 0;
+}
+
 async function resolveNeteaseUrl(
   track: QiniuPlaylistTrack,
   br: number,
@@ -557,8 +610,12 @@ async function resolveNeteaseUrl(
 ): Promise<string | null> {
   try {
     const result = await getSongUrl(track.id, br * 1000, credential);
-    const url = result?.data?.data?.[0]?.url;
+    const entry = result?.data?.data?.[0] as
+      { url?: unknown; freeTrialInfo?: unknown } | undefined;
+    const url = entry?.url;
     if (!url || typeof url !== "string" || url.length > 4096) return null;
+    // A non-null freeTrialInfo means NetEase only granted a ~30s preview.
+    if (entry?.freeTrialInfo) return null;
     return normalizeCacheSourceUrl(url);
   } catch {
     return null;
@@ -750,6 +807,216 @@ class QiniuAudioCache implements AudioCacheLike {
         )
     );
     return "queued";
+  }
+
+  /**
+   * Bounded, resumable playlist sync meant to be called repeatedly (cron or on
+   * app open). Each call does at most a few seconds / subrequests of work:
+   *   1. already cached or known-unavailable tracks are skipped (KV only);
+   *   2. submitted downloads are verified with one probe and marked ready;
+   *   3. new tracks get a complete (non-trial) source submitted to Qiniu.
+   * Tracks that repeatedly have no source are recorded as unavailable so the
+   * client can hide them.
+   */
+  async syncNeteasePlaylist(
+    playlistId: string,
+    credential: string,
+    budget: { timeMs?: number; subrequests?: number } = {}
+  ): Promise<AudioCacheSyncResult> {
+    if (!isSafePlaylistId(playlistId)) {
+      throw new TypeError("Invalid NetEase playlist ID");
+    }
+    const normalizedPlaylistId = normalizeId(playlistId);
+    const deadline =
+      Date.now() + (budget.timeMs ?? SYNC_DEFAULT_TIME_BUDGET_MS);
+    let subrequestsLeft = budget.subrequests ?? SYNC_DEFAULT_SUBREQUEST_BUDGET;
+    const spend = (count: number) => {
+      if (subrequestsLeft < count || Date.now() > deadline) return false;
+      subrequestsLeft -= count;
+      return true;
+    };
+
+    const tracks = await this.loadPlaylistTracks(
+      normalizedPlaylistId,
+      credential
+    );
+    subrequestsLeft -=
+      Math.ceil(tracks.length / NETEASE_PLAYLIST_PAGE_SIZE) + 1;
+
+    const result: AudioCacheSyncResult = {
+      total: tracks.length,
+      ready: 0,
+      pending: 0,
+      submitted: 0,
+      unavailable: [],
+      remaining: 0,
+    };
+
+    for (const track of tracks) {
+      const hash = await hashTargetKey(
+        canonicalTargetKey({ source: "_netease", id: track.id })
+      );
+      if (await this.readRecord(hash)) {
+        result.ready += 1;
+        continue;
+      }
+
+      const miss = await this.readMiss(hash);
+      if (miss && miss.rounds >= MISS_ROUNDS_BEFORE_UNAVAILABLE) {
+        result.unavailable.push(track.id);
+        continue;
+      }
+
+      const pending = await this.readPending(hash);
+      if (pending) {
+        const age = Date.now() - pending.submittedAt;
+        if (age < PENDING_VERIFY_AFTER_MS || !spend(1)) {
+          result.pending += 1;
+          continue;
+        }
+        const ready = await probeObject(this.config, pending.objectKey);
+        if (ready) {
+          await this.writeReadyRecord(
+            hash,
+            canonicalTargetKey({ source: "_netease", id: track.id }),
+            pending.objectKey,
+            pending.br,
+            ready
+          );
+          await this.env.oh_file_url.delete(PENDING_KEY_PREFIX + hash);
+          result.ready += 1;
+          continue;
+        }
+        if (age < PENDING_GIVE_UP_AFTER_MS) {
+          result.pending += 1;
+          continue;
+        }
+        // The download never landed: count it as a failed round and retry.
+        await this.env.oh_file_url.delete(PENDING_KEY_PREFIX + hash);
+        await this.recordMiss(hash, miss);
+        result.remaining += 1;
+        continue;
+      }
+
+      // Budget for one submit: NetEase URL + Qiniu submit, and up to 4 more
+      // for the generic fallback (2 searches + URL).
+      if (!spend(2)) {
+        result.remaining += 1;
+        continue;
+      }
+      const objectKeyValue = objectKey(this.config, hash);
+      let source: { url: string; br: number } | null = null;
+      const neteaseUrl = await resolveNeteaseUrl(track, 320, credential);
+      if (neteaseUrl) source = { url: neteaseUrl, br: 320 };
+      if (!source && spend(4)) {
+        const alternatives = (
+          await Promise.all(
+            GENERIC_SOURCES.map((genericSource) =>
+              genericSearch(genericSource, track)
+            )
+          )
+        ).flat();
+        for (const candidate of alternatives.slice(0, 2)) {
+          if (candidate.source !== "joox" && candidate.source !== "kuwo")
+            continue;
+          const url = await genericUrl(candidate.source, candidate.urlId, 320);
+          if (url) {
+            source = { url, br: 320 };
+            break;
+          }
+        }
+      }
+
+      if (!source) {
+        const rounds = await this.recordMiss(hash, miss);
+        if (rounds >= MISS_ROUNDS_BEFORE_UNAVAILABLE) {
+          result.unavailable.push(track.id);
+        } else {
+          result.remaining += 1;
+        }
+        continue;
+      }
+
+      if (await submitQiniuFetch(this.config, source.url, objectKeyValue)) {
+        await this.env.oh_file_url.put(
+          PENDING_KEY_PREFIX + hash,
+          JSON.stringify({
+            objectKey: objectKeyValue,
+            br: source.br,
+            submittedAt: Date.now(),
+          }),
+          { expirationTtl: 24 * 60 * 60 }
+        );
+        result.submitted += 1;
+        result.pending += 1;
+      } else {
+        result.remaining += 1;
+      }
+    }
+
+    await this.env.oh_file_url.put(
+      PLAYLIST_STATUS_KEY_PREFIX + normalizedPlaylistId,
+      JSON.stringify({ ...result, updatedAt: Date.now() }),
+      { expirationTtl: MISS_TTL_SECONDS }
+    );
+    return result;
+  }
+
+  async getPlaylistStatus(
+    playlistId: string
+  ): Promise<(AudioCacheSyncResult & { updatedAt: number }) | null> {
+    if (!isSafePlaylistId(playlistId)) return null;
+    const value = await this.env.oh_file_url.get(
+      PLAYLIST_STATUS_KEY_PREFIX + normalizeId(playlistId),
+      { type: "json" }
+    );
+    return value && typeof value === "object"
+      ? (value as AudioCacheSyncResult & { updatedAt: number })
+      : null;
+  }
+
+  private async readPending(
+    hash: string
+  ): Promise<{ objectKey: string; br: number; submittedAt: number } | null> {
+    const value = await this.env.oh_file_url.get(PENDING_KEY_PREFIX + hash, {
+      type: "json",
+    });
+    if (!value || typeof value !== "object") return null;
+    const pending = value as {
+      objectKey?: unknown;
+      br?: unknown;
+      submittedAt?: unknown;
+    };
+    return typeof pending.objectKey === "string" &&
+      pending.objectKey.startsWith(`${this.config.objectPrefix}/`) &&
+      typeof pending.br === "number" &&
+      typeof pending.submittedAt === "number"
+      ? (pending as { objectKey: string; br: number; submittedAt: number })
+      : null;
+  }
+
+  private async readMiss(hash: string): Promise<{ rounds: number } | null> {
+    const value = await this.env.oh_file_url.get(MISS_KEY_PREFIX + hash, {
+      type: "json",
+    });
+    return value &&
+      typeof value === "object" &&
+      typeof (value as { rounds?: unknown }).rounds === "number"
+      ? (value as { rounds: number })
+      : null;
+  }
+
+  private async recordMiss(
+    hash: string,
+    previous: { rounds: number } | null
+  ): Promise<number> {
+    const rounds = (previous?.rounds ?? 0) + 1;
+    await this.env.oh_file_url.put(
+      MISS_KEY_PREFIX + hash,
+      JSON.stringify({ rounds, at: Date.now() }),
+      { expirationTtl: MISS_TTL_SECONDS }
+    );
+    return rounds;
   }
 
   async getJob(jobId: string): Promise<AudioCacheJobStatus | null> {
@@ -1004,8 +1271,7 @@ class QiniuAudioCache implements AudioCacheLike {
     };
     await this.env.oh_file_url.put(
       cacheKeyForHash(hash),
-      JSON.stringify(record),
-      { expirationTtl: 90 * 24 * 60 * 60 }
+      JSON.stringify(record)
     );
   }
 }

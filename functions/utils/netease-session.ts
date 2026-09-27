@@ -250,13 +250,26 @@ export async function readNeteaseSession(
   cookieHeader: string | undefined,
   now = Date.now()
 ): Promise<NeteaseSession | null> {
-  const { hmacSecret, encryptionSecret } = requireIndependentSecrets(env);
+  const { hmacSecret } = requireIndependentSecrets(env);
   const token = parseCookie(cookieHeader, NETEASE_SESSION_COOKIE);
   if (!token) return null;
 
   const id = await verifySessionToken(token, hmacSecret);
   if (!id) return null;
+  return readNeteaseSessionById(env, id, now);
+}
 
+/**
+ * Server-side lookup by session id, for trusted background work (the audio
+ * cache sync) that acts on behalf of the owner without a browser cookie.
+ */
+export async function readNeteaseSessionById(
+  env: Env,
+  id: string,
+  now = Date.now()
+): Promise<NeteaseSession | null> {
+  const { encryptionSecret } = requireIndependentSecrets(env);
+  if (!/^[A-Za-z0-9_-]{16,128}$/.test(id)) return null;
   const record = await env.SESSION_KV.get(sessionKey(id), { type: "json" });
   if (!record || record.version !== 1) return null;
   const stored = record as StoredNeteaseSession;

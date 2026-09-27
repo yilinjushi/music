@@ -307,7 +307,7 @@ export function MusicTrackList({
   }
 
   const renderHeader = () => (
-    <div className="sticky top-0 z-20 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+    <div className="sticky top-0 z-20 border-b bg-background backdrop-blur">
       <div className="grid items-center gap-4 px-4 h-10 text-xs text-muted-foreground grid-cols-[1.75rem_1fr_auto]">
         {!isSelectionMode ? (
           <>

@@ -1,0 +1,32 @@
+name: Audio cache sync
+
+# Every 10 minutes, ask the site to cache the next batch of 红心 songs into
+# Qiniu. Each call is bounded (~20s); repeated calls work through the list.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audio-cache-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trigger bounded sync
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET is not configured; skipping."
+            exit 0
+          fi
+          curl -sS --fail-with-body --max-time 90 -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://music.80007001.xyz/cron/audio-cache

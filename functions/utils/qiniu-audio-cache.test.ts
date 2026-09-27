@@ -216,4 +216,122 @@ describe("Qiniu audio cache adapter", () => {
       ).rejects.toBeInstanceOf(TypeError);
     });
   });
+
+  describe("bounded playlist sync", () => {
+    function playlistWith(id: number) {
+      netease.getPlaylistDetail.mockResolvedValue({
+        tracks: [{ id, name: "Song", ar: [{ name: "Artist" }], dt: 180_000 }],
+        trackIds: [{ id }],
+        hasMore: false,
+        nextOffset: 1,
+        trackCount: 1,
+      });
+    }
+
+    function memoryKv(kv: ReturnType<typeof createKv>) {
+      const store = new Map<string, string>();
+      kv.get.mockImplementation(
+        async (key: string, options?: { type?: string }) => {
+          const value = store.get(key) ?? null;
+          return options?.type === "json" && value ? JSON.parse(value) : value;
+        }
+      );
+      kv.put.mockImplementation(async (key: string, value: string) => {
+        store.set(key, value);
+      });
+      kv.delete.mockImplementation(async (key: string) => {
+        store.delete(key);
+      });
+      return store;
+    }
+
+    it("submits a full-length source without waiting, then marks it ready", async () => {
+      const { env, kv } = createEnv();
+      const store = memoryKv(kv);
+      playlistWith(123);
+      netease.getSongUrl.mockResolvedValue({
+        data: {
+          data: [
+            { url: "https://m701.music.126.net/a.mp3", freeTrialInfo: null },
+          ],
+        },
+      });
+      const fetchMock = vi
+        .spyOn(globalThis, "fetch")
+        .mockResolvedValueOnce(Response.json({ id: "task-1" }));
+      const cache = createQiniuAudioCache(env, vi.fn())!;
+
+      const first = await cache.syncNeteasePlaylist(
+        "neplaylist_1",
+        "MUSIC_U=x"
+      );
+      expect(first).toMatchObject({
+        total: 1,
+        submitted: 1,
+        pending: 1,
+        ready: 0,
+      });
+      expect(
+        [...store.keys()].some((key) =>
+          key.startsWith("audio-cache-pending:v1:")
+        )
+      ).toBe(true);
+
+      // Pretend the submit happened long enough ago, then the probe finds it.
+      for (const [key, value] of store) {
+        if (key.startsWith("audio-cache-pending:v1:")) {
+          store.set(
+            key,
+            JSON.stringify({ ...JSON.parse(value), submittedAt: 0 })
+          );
+        }
+      }
+      fetchMock.mockResolvedValueOnce(
+        new Response("x", {
+          status: 206,
+          headers: { "Content-Type": "audio/mpeg" },
+        })
+      );
+      const second = await cache.syncNeteasePlaylist(
+        "neplaylist_1",
+        "MUSIC_U=x"
+      );
+      expect(second).toMatchObject({ ready: 1, pending: 0 });
+      expect(
+        [...store.keys()].some((key) => key.startsWith("audio-cache:v1:"))
+      ).toBe(true);
+    });
+
+    it("never caches a NetEase trial clip and reports songs with no source", async () => {
+      const { env, kv } = createEnv();
+      memoryKv(kv);
+      playlistWith(456);
+      netease.getSongUrl.mockResolvedValue({
+        data: {
+          data: [
+            {
+              url: "https://m701.music.126.net/trial.mp3",
+              freeTrialInfo: { start: 0, end: 30 },
+            },
+          ],
+        },
+      });
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        Response.json({ data: [] })
+      );
+      const cache = createQiniuAudioCache(env, vi.fn())!;
+
+      let result = await cache.syncNeteasePlaylist("neplaylist_1", "MUSIC_U=x");
+      expect(result.submitted).toBe(0);
+      for (let round = 0; round < 2; round += 1) {
+        result = await cache.syncNeteasePlaylist("neplaylist_1", "MUSIC_U=x");
+      }
+      expect(result.unavailable).toEqual(["456"]);
+      await expect(
+        cache.getPlaylistStatus("neplaylist_1")
+      ).resolves.toMatchObject({
+        unavailable: ["456"],
+      });
+    });
+  });
 });

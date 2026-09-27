@@ -72,7 +72,7 @@ export function PwaInstallPrompt() {
     <section
       aria-label="安装网页播放器"
       aria-live="polite"
-      className="fixed inset-x-3 top-[calc(var(--safe-area-top)+12px)] z-[90] mx-auto max-w-md rounded-2xl border bg-background/95 p-3 shadow-xl backdrop-blur"
+      className="fixed inset-x-3 top-[calc(var(--safe-area-top)+12px)] z-[90] mx-auto max-w-md rounded-2xl border bg-background p-3 shadow-xl backdrop-blur"
     >
       <div className="flex items-center gap-3">
         <Download

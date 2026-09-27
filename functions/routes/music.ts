@@ -52,9 +52,9 @@ const AUDIO_CACHE_SOURCES = new Set([
 const AUDIO_CACHE_ID_PATTERN = /^[A-Za-z0-9._~:+/=-]{1,256}$/;
 const AUDIO_CACHE_PLAYLIST_ID_PATTERN =
   /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
-type MusicContext = Context<{ Bindings: Env }>;
+export type MusicContext = Context<{ Bindings: Env }>;
 
-function resolveAudioCache(c: MusicContext) {
+export function resolveAudioCache(c: MusicContext) {
   return (
     c.env.AUDIO_CACHE ??
     createQiniuAudioCache(c.env, (promise) => c.executionCtx.waitUntil(promise))
@@ -550,6 +550,68 @@ musicRoutes.post("/cache/netease-track", async (c) => {
     if (error instanceof TypeError) {
       return c.json({ error: "Invalid audio cache request" }, 400);
     }
+    return c.json({ error: "Audio cache unavailable" }, 503);
+  }
+});
+
+export const AUDIO_CACHE_CRON_TARGET_KEY = "audio-cache-cron-target:v1";
+
+// Called by the app when the 红心 playlist opens: runs one bounded sync step in
+// the background and remembers this session + playlist as the cron target.
+musicRoutes.post("/cache/netease-playlist-sync", async (c) => {
+  const cache = resolveAudioCache(c);
+  if (!cache) return c.json({ error: "Audio cache unavailable" }, 404);
+  const body = await c.req.json<unknown>().catch(() => null);
+  const playlistId =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>).playlistId
+      : undefined;
+  if (
+    typeof playlistId !== "string" ||
+    !AUDIO_CACHE_PLAYLIST_ID_PATTERN.test(playlistId) ||
+    Object.keys(body as object).length !== 1
+  ) {
+    return c.json({ error: "Invalid playlist ID" }, 400);
+  }
+  try {
+    const session = await readNeteaseSession(c.env, c.req.header("Cookie"));
+    if (!session) return c.json({ error: "Unauthorized" }, 401);
+    const rate = await checkFixedWindowRateLimit(
+      c.env.oh_file_url,
+      "audio-cache-sync",
+      requestClientId(c.req.raw.headers),
+      2,
+      60
+    );
+    if (!rate.allowed) return c.json({ state: "throttled" }, 202);
+    await c.env.oh_file_url.put(
+      AUDIO_CACHE_CRON_TARGET_KEY,
+      JSON.stringify({ sessionId: session.id, playlistId })
+    );
+    c.executionCtx.waitUntil(
+      cache
+        .syncNeteasePlaylist(playlistId, session.credential)
+        .catch(() => undefined)
+    );
+    return c.json({ state: "started" }, 202);
+  } catch {
+    return c.json({ error: "Audio cache unavailable" }, 503);
+  }
+});
+
+musicRoutes.get("/cache/playlist-status", async (c) => {
+  const cache = resolveAudioCache(c);
+  if (!cache) return c.json({ error: "Audio cache unavailable" }, 404);
+  const playlistId = new URL(c.req.url).searchParams.get("playlistId") || "";
+  if (!AUDIO_CACHE_PLAYLIST_ID_PATTERN.test(playlistId)) {
+    return c.json({ error: "Invalid playlist ID" }, 400);
+  }
+  try {
+    const session = await readNeteaseSession(c.env, c.req.header("Cookie"));
+    if (!session) return c.json({ error: "Unauthorized" }, 401);
+    const status = await cache.getPlaylistStatus(playlistId);
+    return status ? c.json(status) : c.json({ error: "No status yet" }, 404);
+  } catch {
     return c.json({ error: "Audio cache unavailable" }, 503);
   }
 });

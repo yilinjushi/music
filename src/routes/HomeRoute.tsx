@@ -9,8 +9,13 @@ import { useNeteaseStore } from "@/store/netease-store";
 import { usePlayHelper } from "@/hooks/usePlayHelper";
 import { useMusicStore } from "@/store/music-store";
 import { getOptionalTrackIdentityKey } from "@/lib/utils/track-identity";
+import {
+  getUnavailableTrackIds,
+  requestNeteasePlaylistSync,
+} from "@/lib/audio-cache";
 
 const HOME_PLAYLIST_ID = "neplaylist_366135532";
+const HOME_REFRESH_AFTER_MS = 30_000;
 
 function HomeLoginGate() {
   return (
@@ -77,6 +82,41 @@ export function HomeRoute() {
     }
   }, [authenticated, sessionState]);
 
+  // iPhone 上 PWA 从后台切回时不会重新加载页面；离开超过 30 秒就重新拉取
+  // 红心歌单，让网易云客户端里新加心的歌自动同步过来。
+  const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        hiddenAt = Date.now();
+      } else if (hiddenAt && Date.now() - hiddenAt > HOME_REFRESH_AFTER_MS) {
+        hiddenAt = 0;
+        setRefreshKey((key) => key + 1);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, []);
+
+  // 每次打开/切回红心页：让服务端在后台把下一批歌存进对象存储，并拿到
+  // 确认没有任何音源的歌，从列表里隐藏。
+  const [hiddenTrackIds, setHiddenTrackIds] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  useEffect(() => {
+    if (sessionState !== "authenticated") return;
+    const controller = new AbortController();
+    requestNeteasePlaylistSync(HOME_PLAYLIST_ID);
+    void getUnavailableTrackIds(HOME_PLAYLIST_ID, controller.signal).then(
+      (ids) => {
+        if (!controller.signal.aborted) setHiddenTrackIds(new Set(ids));
+      }
+    );
+    return () => controller.abort();
+  }, [sessionState, refreshKey]);
+
   if (sessionState === "checking") return <PageLoader />;
   if (sessionState === "unauthenticated") return <HomeLoginGate />;
 
@@ -88,6 +128,8 @@ export function HomeRoute() {
       onPlay={(track, list) => handlePlay(track, list, "home_netease_playlist")}
       currentTrackKey={currentTrackKey}
       isPlaying={isPlaying}
+      refreshKey={refreshKey}
+      hiddenTrackIds={hiddenTrackIds}
     />
   );
 }

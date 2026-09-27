@@ -294,7 +294,7 @@ export function MusicPlaylistView({
       </div>
 
       {/* List */}
-      <div className="flex-1 min-h-0 bg-background/50">
+      <div className="flex-1 min-h-0 bg-background">
         <MusicTrackList
           tracks={filteredTracks}
           scrollContainerRef={scrollContainerRef}

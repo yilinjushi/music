@@ -574,7 +574,7 @@ export function NeteaseLogin({ autoOpen = false }: NeteaseLoginProps) {
                     )}
 
                   {qrStatus === "scanned" && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-background/65 backdrop-blur-sm">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-background backdrop-blur-sm">
                       <Check className="mb-2 h-9 w-9 text-primary" />
                       <span className="text-sm font-medium">已扫码</span>
                       <span className="mt-1 text-[11px] text-muted-foreground">
@@ -584,7 +584,7 @@ export function NeteaseLogin({ autoOpen = false }: NeteaseLoginProps) {
                   )}
 
                   {qrStatus === "expired" && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-background/80 backdrop-blur-sm">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-background backdrop-blur-sm">
                       <ScanLine className="mb-3 h-7 w-7 text-muted-foreground/50" />
                       <Button
                         size="sm"

@@ -61,6 +61,10 @@ interface NeteaseDetailProps {
   onPlay: (track: MusicTrack, list: MusicTrack[]) => void;
   currentTrackKey?: string | null;
   isPlaying?: boolean;
+  /** Changing this value refetches the detail (e.g. when the PWA resumes). */
+  refreshKey?: number;
+  /** NetEase song ids with no playable source; hidden from the list. */
+  hiddenTrackIds?: ReadonlySet<string>;
 }
 
 interface UnifiedDetail {
@@ -87,6 +91,8 @@ export function NeteaseDetail({
   onPlay,
   currentTrackKey,
   isPlaying,
+  refreshKey = 0,
+  hiddenTrackIds,
 }: NeteaseDetailProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -183,7 +189,7 @@ export function NeteaseDetail({
           tracks: rawTracks.map((s) => convertSongToMusicTrack(s)),
         };
       },
-      [id, type, authenticated]
+      [id, type, authenticated, refreshKey]
     );
 
   useEffect(() => {
@@ -334,9 +340,16 @@ export function NeteaseDetail({
     }
   };
 
+  const visibleTracks = useMemo(
+    () =>
+      hiddenTrackIds?.size
+        ? tracks.filter((track) => !hiddenTrackIds.has(track.id))
+        : tracks,
+    [tracks, hiddenTrackIds]
+  );
   const filteredTracks = useMemo(
-    () => filterTracks(tracks, searchQuery),
-    [tracks, searchQuery]
+    () => filterTracks(visibleTracks, searchQuery),
+    [visibleTracks, searchQuery]
   );
 
   const handleLoadMore = async () => {
@@ -496,9 +509,11 @@ export function NeteaseDetail({
       scrollRef={scrollRef}
       action={action}
       isShuffle={isShuffle}
-      tracks={tracks}
+      tracks={visibleTracks}
       onPlayTrack={
-        tracks.length > 0 ? (track) => onPlay(track, tracks) : undefined
+        visibleTracks.length > 0
+          ? (track) => onPlay(track, visibleTracks)
+          : undefined
       }
       searchQuery={searchQuery}
       onSearchChange={setSearchQuery}
@@ -514,7 +529,7 @@ export function NeteaseDetail({
         <MusicTrackList
           tracks={filteredTracks}
           scrollContainerRef={scrollRef}
-          onPlay={(track) => onPlay(track, tracks)}
+          onPlay={(track) => onPlay(track, visibleTracks)}
           currentTrackKey={currentTrackKey}
           isPlaying={isPlaying}
           emptyMessage="列表为空"

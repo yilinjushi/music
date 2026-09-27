@@ -45,6 +45,15 @@ export interface AudioCacheNeteaseTrack {
 
 export type AudioCacheTrackState = "cached" | "pending" | "queued";
 
+export interface AudioCacheSyncResult {
+  total: number;
+  ready: number;
+  pending: number;
+  submitted: number;
+  unavailable: string[];
+  remaining: number;
+}
+
 export interface AudioCacheLike {
   lookup(
     track: AudioCacheTrackReference
@@ -58,6 +67,14 @@ export interface AudioCacheLike {
     track: AudioCacheNeteaseTrack,
     credential: string
   ): Promise<AudioCacheTrackState>;
+  syncNeteasePlaylist(
+    playlistId: string,
+    credential: string,
+    budget?: { timeMs?: number; subrequests?: number }
+  ): Promise<AudioCacheSyncResult>;
+  getPlaylistStatus(
+    playlistId: string
+  ): Promise<(AudioCacheSyncResult & { updatedAt: number }) | null>;
   getJob(jobId: string): Promise<AudioCacheJobStatus | null>;
 }
 
@@ -77,4 +94,5 @@ export type Env = {
   QINIU_AUDIO_CACHE_PREFIX?: string;
   PASSWORD?: string;
   GITHUB_TOKEN?: string;
+  CRON_SECRET?: string;
 };

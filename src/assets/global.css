@@ -120,7 +120,7 @@
     --safe-area-inset-right,
     env(safe-area-inset-right, 0px)
   );
-  --tab-bar-base-height: 56px;
+  --tab-bar-base-height: 60px;
   --tab-bar-safe-height: calc(
     var(--tab-bar-base-height) + var(--safe-area-bottom)
   );
@@ -175,6 +175,8 @@
   }
 
   html {
+    /* iPhone：整体字号放大一档（17px 基准，rem 尺寸同步放大）。 */
+    font-size: 106.25%;
     min-height: 100%;
     scrollbar-gutter: auto;
     scrollbar-width: thin;

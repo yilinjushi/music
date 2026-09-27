@@ -56,7 +56,7 @@ export function PlaylistCategorySelector({
           <div className="space-y-6">
             {NETEASE_CATS.map((group) => (
               <section key={group.category} className="space-y-3">
-                <h4 className="sticky top-0 z-10 py-1 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60 bg-background/95 backdrop-blur-sm">
+                <h4 className="sticky top-0 z-10 py-1 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/60 bg-background backdrop-blur-sm">
                   {group.category}
                 </h4>
                 <div className="grid grid-cols-4 gap-2">

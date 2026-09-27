@@ -3,6 +3,7 @@ import { proxyRoutes } from "./routes/proxy";
 import { musicRoutes } from "./routes/music";
 import { syncRoutes } from "./routes/sync";
 import { syncRoutesV2 } from "./routes/sync-v2";
+import { cronRoutes } from "./routes/cron";
 
 import { Hono, type Context } from "hono";
 import type { Env } from "./types/hono";
@@ -52,6 +53,7 @@ app.route("/proxy", proxyRoutes);
 app.route("/music-api", musicRoutes);
 app.route("/sync", syncRoutes);
 app.route("/sync/v2", syncRoutesV2);
+app.route("/cron", cronRoutes);
 
 // Export AppType for RPC
 export type AppType = typeof app;

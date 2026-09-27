@@ -154,3 +154,46 @@ export async function getAudioCacheJob(
   );
   return readJobResponse(response);
 }
+
+/**
+ * Ask the server to run one bounded background sync step for a NetEase
+ * playlist (caches the next few songs into object storage). Fire-and-forget.
+ */
+export function requestNeteasePlaylistSync(playlistId: string): void {
+  void fetchWithTimeout(
+    `${CACHE_PREFIX}/netease-playlist-sync`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ playlistId }),
+      credentials: "include",
+      cache: "no-store",
+    },
+    5_000
+  ).catch(() => undefined);
+}
+
+/** NetEase song ids the cache sync found no complete source for. */
+export async function getUnavailableTrackIds(
+  playlistId: string,
+  signal?: AbortSignal
+): Promise<string[]> {
+  try {
+    const response = await fetchWithTimeout(
+      `${CACHE_PREFIX}/playlist-status?playlistId=${encodeURIComponent(playlistId)}`,
+      { credentials: "include", cache: "no-store", signal },
+      5_000
+    );
+    if (!response.ok) return [];
+    const payload = (await response.json().catch(() => null)) as {
+      unavailable?: unknown;
+    } | null;
+    return Array.isArray(payload?.unavailable)
+      ? payload.unavailable.filter(
+          (id): id is string => typeof id === "string" && /^\d{1,20}$/.test(id)
+        )
+      : [];
+  } catch {
+    return [];
+  }
+}

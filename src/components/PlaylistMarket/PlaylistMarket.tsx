@@ -30,7 +30,7 @@ const PAGE_SIZE = 30;
 const SUB_TAB_HEIGHT = "h-8";
 
 export const PLAYLIST_MARKET_ROOT_CLASS_NAME =
-  "flex h-full flex-col bg-background/50";
+  "flex h-full flex-col bg-background";
 
 const getSnapshotKey = (category: string, tab: string) =>
   `market-snapshot:${category}:${category === "featured" ? tab : "default"}`;
@@ -260,7 +260,7 @@ export function PlaylistMarket() {
 
   return (
     <div className={PLAYLIST_MARKET_ROOT_CLASS_NAME}>
-      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-xl border-b border-border/20 shadow-sm">
+      <header className="sticky top-0 z-20 bg-background backdrop-blur-xl border-b border-border/20 shadow-sm">
         <div className="flex items-center justify-between px-3 py-1.5 gap-2">
           <div className="flex-1 overflow-hidden relative">
             <div

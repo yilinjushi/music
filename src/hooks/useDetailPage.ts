@@ -44,7 +44,12 @@ export function useDetailPage<T>(
 
     const run = async () => {
       try {
-        setState((prev) => ({ ...prev, loading: true, error: false }));
+        // Refresh silently when data is already on screen (e.g. PWA resume).
+        setState((prev) =>
+          prev.detail
+            ? { ...prev, error: false }
+            : { ...prev, loading: true, error: false }
+        );
         const result = await fetchFnRef.current(controller.signal);
         if (controller.signal.aborted) return;
         setState({
@@ -55,7 +60,11 @@ export function useDetailPage<T>(
         });
       } catch {
         if (controller.signal.aborted) return;
-        setState((prev) => ({ ...prev, loading: false, error: true }));
+        setState((prev) =>
+          prev.detail
+            ? { ...prev, loading: false }
+            : { ...prev, loading: false, error: true }
+        );
       }
     };
 
