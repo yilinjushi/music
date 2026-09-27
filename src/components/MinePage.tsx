@@ -13,6 +13,7 @@ import {
   Link2,
 } from "lucide-react";
 import { PlaylistCover } from "./PlaylistCover";
+import { MineSection } from "./PlaylistMarket/MineSection";
 import { useMusicStore } from "@/store/music-store";
 import { useShallow } from "zustand/react/shallow";
 import { Button } from "./ui/button";
@@ -115,9 +116,19 @@ export function MinePage({ onSelectPlaylist }: MinePageProps) {
         ))}
       </div>
 
+      <section aria-labelledby="netease-mine-title" className="mb-6">
+        <h2
+          id="netease-mine-title"
+          className="mb-3 px-1 text-base font-semibold text-foreground"
+        >
+          网易云
+        </h2>
+        <MineSection embedded />
+      </section>
+
       {/* 标题栏 */}
       <div className="flex items-center justify-between mb-3 px-1">
-        <h2 className="text-base font-semibold text-foreground">我的歌单</h2>
+        <h2 className="text-base font-semibold text-foreground">本地歌单</h2>
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"

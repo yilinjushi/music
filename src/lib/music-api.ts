@@ -9,7 +9,7 @@ import type {
 } from "@/types/music";
 import { cachedFetch, deleteCachedValue } from "@/lib/utils/cache";
 import { searchSuggest } from "@/lib/netease/netease-api";
-import { lookupAudioCache } from "@/lib/audio-cache";
+import { lookupAudioCache, requestNeteaseTrackCache } from "@/lib/audio-cache";
 import { MusicProviderFactory, isAbort } from "./music-provider";
 import { logger } from "@/lib/logger";
 
@@ -157,6 +157,8 @@ export const musicApi = {
         signal
       );
       throwIfAborted(signal);
+      // 找到音源后，让服务端在后台把这首歌存进对象存储；不等待、不影响播放。
+      if (url) requestNeteaseTrackCache(track);
       return url;
     } catch (error) {
       if (signal?.aborted || isAbort(error)) throw error;

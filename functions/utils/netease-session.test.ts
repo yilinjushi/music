@@ -6,6 +6,7 @@ import {
   createNeteaseSession,
   deleteNeteaseSession,
   readNeteaseSession,
+  renewNeteaseSession,
   serializeExpiredSessionCookie,
   serializeSessionCookie,
 } from "./netease-session";
@@ -163,5 +164,21 @@ describe("NetEase server-side session", () => {
     expect(serialized).not.toContain("Domain=");
     expect(serialized).not.toContain("MUSIC_U");
     expect(serializeExpiredSessionCookie()).toContain("Max-Age=0");
+  });
+
+  it("slides an active session's expiry forward at most once a day", async () => {
+    const { env } = createEnv();
+    env.NETEASE_SESSION_TTL_SECONDS = String(400 * 24 * 60 * 60);
+    const day = 24 * 60 * 60 * 1000;
+    const created = await createNeteaseSession(env, "MUSIC_U=x", profile, 0);
+    const header = cookieHeader(created.token);
+
+    expect(created.maxAge).toBe(400 * 24 * 60 * 60);
+    await expect(renewNeteaseSession(env, header, day / 2)).resolves.toBeNull();
+    await expect(renewNeteaseSession(env, header, 30 * day)).resolves.toBe(
+      400 * 24 * 60 * 60
+    );
+    const session = await readNeteaseSession(env, header, 30 * day);
+    expect(session?.expiresAt).toBe(430 * day);
   });
 });

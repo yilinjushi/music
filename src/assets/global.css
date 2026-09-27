@@ -4,68 +4,68 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: hsl(210 100% 99%);
-  --foreground: hsl(205 25% 13%);
+  --background: hsl(40 20% 97%);
+  --foreground: hsl(0 0% 6%);
   --card: hsl(0 0% 100%);
-  --card-foreground: hsl(205 25% 13%);
+  --card-foreground: hsl(0 0% 6%);
   --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(205 25% 13%);
-  --primary: hsl(156 78% 28%);
+  --popover-foreground: hsl(0 0% 6%);
+  --primary: hsl(356 100% 42%);
   --primary-foreground: hsl(0 0% 100%);
-  --secondary: hsl(205 75% 94%);
-  --secondary-foreground: hsl(205 25% 13%);
-  --muted: hsl(205 75% 94%);
-  --muted-foreground: hsl(205 11% 34%);
-  --accent: hsl(158 100% 31%);
+  --secondary: hsl(0 0% 91%);
+  --secondary-foreground: hsl(0 0% 6%);
+  --muted: hsl(0 0% 92%);
+  --muted-foreground: hsl(0 0% 32%);
+  --accent: hsl(356 100% 42%);
   --accent-foreground: hsl(0 0% 100%);
-  --destructive: hsl(359 71% 55%);
+  --destructive: hsl(356 100% 42%);
   --destructive-foreground: hsl(0 0% 100%);
-  --border: hsl(205 30% 92%);
-  --input: hsl(206 35% 87%);
-  --ring: hsl(158 100% 31%);
-  --glass-bg: rgba(255, 255, 255, 0.65);
-  --glass-border: rgba(0, 0, 0, 0.05);
-  --radius: 0.75rem;
-  --sidebar: hsl(205 100% 98%);
-  --sidebar-foreground: hsl(205 25% 13%);
-  --sidebar-primary: hsl(158 100% 31%);
+  --border: hsl(0 0% 84%);
+  --input: hsl(0 0% 78%);
+  --ring: hsl(356 100% 42%);
+  --glass-bg: rgba(250, 248, 244, 0.9);
+  --glass-border: rgba(0, 0, 0, 0.12);
+  --radius: 0.25rem;
+  --sidebar: hsl(40 20% 97%);
+  --sidebar-foreground: hsl(0 0% 6%);
+  --sidebar-primary: hsl(356 100% 42%);
   --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(205 75% 94%);
-  --sidebar-accent-foreground: hsl(205 25% 13%);
-  --sidebar-border: hsl(206 35% 87%);
-  --sidebar-ring: hsl(158 100% 31%);
+  --sidebar-accent: hsl(0 0% 91%);
+  --sidebar-accent-foreground: hsl(0 0% 6%);
+  --sidebar-border: hsl(0 0% 84%);
+  --sidebar-ring: hsl(356 100% 42%);
 }
 
 .dark {
-  --background: hsl(218 36% 9%);
-  --foreground: hsl(213 30% 93%);
-  --card: hsl(215 30% 11%);
-  --card-foreground: hsl(213 30% 93%);
-  --popover: hsl(214 31% 10%);
-  --popover-foreground: hsl(213 29% 94%);
-  --primary: hsl(159 45% 56%);
-  --primary-foreground: hsl(218 17% 9%);
-  --secondary: hsl(219 18% 15%);
-  --secondary-foreground: hsl(213 14% 87%);
-  --muted: hsl(215 18% 13%);
-  --muted-foreground: hsl(215 7% 65%);
-  --accent: hsl(170 37% 49%);
-  --accent-foreground: hsl(223 24% 6%);
-  --destructive: hsl(0 74% 61%);
-  --destructive-foreground: hsl(0 0% 97%);
-  --border: hsl(217 15% 17%);
-  --input: hsl(215 17% 14%);
-  --ring: hsl(169 37% 52%);
-  --glass-bg: rgba(18, 24, 36, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --sidebar: hsl(214 42% 7%);
-  --sidebar-foreground: hsl(215 27% 91%);
-  --sidebar-primary: hsl(161 40% 54%);
-  --sidebar-primary-foreground: hsl(220 30% 4%);
-  --sidebar-accent: hsl(217 21% 12%);
-  --sidebar-accent-foreground: hsl(213 18% 90%);
-  --sidebar-border: hsl(215 15% 16%);
-  --sidebar-ring: hsl(169 37% 52%);
+  --background: hsl(0 0% 4%);
+  --foreground: hsl(0 0% 96%);
+  --card: hsl(0 0% 8%);
+  --card-foreground: hsl(0 0% 96%);
+  --popover: hsl(0 0% 8%);
+  --popover-foreground: hsl(0 0% 96%);
+  --primary: hsl(357 100% 60%);
+  --primary-foreground: hsl(0 0% 4%);
+  --secondary: hsl(0 0% 13%);
+  --secondary-foreground: hsl(0 0% 92%);
+  --muted: hsl(0 0% 11%);
+  --muted-foreground: hsl(0 0% 66%);
+  --accent: hsl(357 100% 60%);
+  --accent-foreground: hsl(0 0% 4%);
+  --destructive: hsl(357 100% 60%);
+  --destructive-foreground: hsl(0 0% 4%);
+  --border: hsl(0 0% 18%);
+  --input: hsl(0 0% 16%);
+  --ring: hsl(357 100% 60%);
+  --glass-bg: rgba(10, 10, 10, 0.9);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --sidebar: hsl(0 0% 4%);
+  --sidebar-foreground: hsl(0 0% 96%);
+  --sidebar-primary: hsl(357 100% 60%);
+  --sidebar-primary-foreground: hsl(0 0% 4%);
+  --sidebar-accent: hsl(0 0% 13%);
+  --sidebar-accent-foreground: hsl(0 0% 92%);
+  --sidebar-border: hsl(0 0% 18%);
+  --sidebar-ring: hsl(357 100% 60%);
 }
 
 @theme inline {
@@ -209,6 +209,10 @@
 
   body {
     @apply bg-background text-foreground;
+    font-family:
+      "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Noto Sans SC",
+      "Microsoft YaHei", sans-serif;
+    letter-spacing: -0.01em;
     min-height: 100%;
     min-height: 100dvh;
     margin: 0;

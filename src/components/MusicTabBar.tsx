@@ -4,7 +4,7 @@ import { Search, Heart, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link, useLocation } from "react-router-dom";
 
-export type TabId = "search" | "favorites" | "mine";
+export type TabId = "home" | "search" | "mine";
 
 interface TabItem {
   id: TabId;
@@ -14,32 +14,19 @@ interface TabItem {
 }
 
 const tabs: TabItem[] = [
-  { id: "search", label: "发现", icon: Search, path: "/search" },
-  { id: "favorites", label: "喜欢", icon: Heart, path: "/favorites" },
+  { id: "home", label: "红心", icon: Heart, path: "/" },
+  { id: "search", label: "搜索", icon: Search, path: "/search" },
   { id: "mine", label: "我的", icon: User, path: "/mine" },
 ];
 
 export function MusicTabBar() {
   const location = useLocation();
-  
+
   // Determine active tab based on current path
   const getActiveTab = (pathname: string): TabId => {
-    // 发现 (Search) - 默认 Tab
-    if (pathname.startsWith("/search")) {
-      return "search";
-    }
-    
-    // 喜欢 (Favorites)
-    if (pathname.startsWith("/favorites")) {
-      return "favorites";
-    }
-
-    // 我的 (Mine)
-    if (pathname.startsWith("/mine")) {
-      return "mine";
-    }
-    
-    return "search"; // Default
+    if (pathname.startsWith("/search")) return "search";
+    if (pathname.startsWith("/mine")) return "mine";
+    return "home";
   };
 
   const activeTab = getActiveTab(location.pathname);
@@ -54,18 +41,20 @@ export function MusicTabBar() {
             key={tab.id}
             to={tab.path}
             className={cn(
-              "flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-0.5 px-3 py-1 transition-colors",
-              isActive ? "text-primary" : "text-muted-foreground"
+              "flex min-h-11 min-w-[56px] flex-col items-center justify-center gap-0.5 border-t-2 px-3 py-1 transition-colors",
+              isActive
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground"
             )}
             aria-label={tab.label}
           >
             <Icon
-              className={cn(
-                "h-5 w-5 transition-all"
-              )}
+              className={cn("h-5 w-5 transition-all")}
               strokeWidth={isActive ? 2.5 : 2}
             />
-            <span className="text-[10px] font-medium">{tab.label}</span>
+            <span className="text-[10px] font-bold tracking-widest">
+              {tab.label}
+            </span>
           </Link>
         );
       })}

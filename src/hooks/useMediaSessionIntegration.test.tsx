@@ -184,6 +184,18 @@ describe("useMediaSessionIntegration", () => {
     cleanup();
   });
 
+  it("keeps reporting playing through the silent gap between tracks", async () => {
+    useMusicStore.setState({ isPlaying: true });
+    const { audio, cleanup } = await renderHook(null);
+
+    act(() => audio.dispatchEvent(new Event("ended")));
+    expect(mediaSession.playbackState).toBe("playing");
+
+    await act(async () => useMusicStore.setState({ isPlaying: false }));
+    expect(mediaSession.playbackState).toBe("paused");
+    cleanup();
+  });
+
   it("removes browser action handlers when the player unmounts", async () => {
     const { cleanup } = await renderHook(null);
     cleanup();

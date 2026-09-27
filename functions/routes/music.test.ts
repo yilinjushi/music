@@ -51,6 +51,42 @@ describe("music route credential boundary", () => {
     });
   });
 
+  it("requires a NetEase session before caching a played track", async () => {
+    const cache = {
+      lookup: vi.fn(),
+      serve: vi.fn(),
+      startNeteasePlaylistJob: vi.fn(),
+      cacheNeteaseTrack: vi.fn(),
+      getJob: vi.fn(),
+    };
+    const request = (body: unknown) =>
+      musicRoutes.request(
+        "https://music.example/cache/netease-track",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        {
+          AUDIO_CACHE: cache,
+          NETEASE_SESSION_HMAC_SECRET: "h".repeat(32),
+          NETEASE_CREDENTIAL_ENC_KEY: "e".repeat(32),
+        } as never
+      );
+
+    expect(
+      (await request({ id: "123", name: "Song", artist: [1] })).status
+    ).toBe(400);
+    expect(
+      (await request({ id: "123", name: "Song", artist: ["A"], url: "x" }))
+        .status
+    ).toBe(400);
+    expect(
+      (await request({ id: "123", name: "Song", artist: ["A"] })).status
+    ).toBe(401);
+    expect(cache.cacheNeteaseTrack).not.toHaveBeenCalled();
+  });
+
   it("fails closed when the audio cache is unavailable", async () => {
     const response = await musicRoutes.request(
       "https://music.example/cache/lookup",

@@ -6,7 +6,9 @@ import type {
   AudioCacheJobStatus,
   AudioCacheLike,
   AudioCacheLookupResult,
+  AudioCacheNeteaseTrack,
   AudioCacheTrackReference,
+  AudioCacheTrackState,
   Env,
 } from "../types/hono";
 import {
@@ -20,6 +22,8 @@ import { normalizeProxyTarget } from "./proxy/fetch";
 const CACHE_KEY_PREFIX = "audio-cache:v1:";
 const JOB_KEY_PREFIX = "audio-cache-job:v1:";
 const ACTIVE_PLAYLIST_KEY_PREFIX = "audio-cache-playlist:v1:";
+const ACTIVE_TRACK_KEY_PREFIX = "audio-cache-track:v1:";
+const ACTIVE_TRACK_TTL_SECONDS = 10 * 60;
 const OBJECT_KEY_PREFIX = "otter-music-cache/v1";
 const JOB_TTL_SECONDS = 24 * 60 * 60;
 const CACHE_QUALITIES = [320, 192, 128] as const;
@@ -29,7 +33,8 @@ const QINIU_FETCH_POLL_DELAY_MS = 1_000;
 const GENERIC_MUSIC_API_URL = "https://music-api.gdstudio.xyz/api.php";
 const GENERIC_SOURCES = ["joox", "kuwo"] as const;
 const AUDIO_CACHE_ID_PATTERN = /^[A-Za-z0-9._~:+/=-]{1,256}$/;
-const NETEASE_PLAYLIST_ID_PATTERN = /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
+const NETEASE_PLAYLIST_ID_PATTERN =
+  /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
 const AUDIO_MIME_ESSENCE =
   /^(?:audio\/[a-z0-9!#$&^_.+-]+|video\/mp4|application\/octet-stream)$/;
 
@@ -84,16 +89,11 @@ interface QiniuCacheCandidate {
 function bytesToBase64Url(bytes: Uint8Array): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_");
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 function normalizeId(value: string): string {
-  return value.replace(
-    /^(?:neplaylist_|ne_playlist_|netrack_|ne_track_)/,
-    ""
-  );
+  return value.replace(/^(?:neplaylist_|ne_playlist_|netrack_|ne_track_)/, "");
 }
 
 function canonicalTargetKey(track: AudioCacheTrackReference): string {
@@ -182,8 +182,10 @@ function qiniuSigningString(
   for (const [name, headerValue] of qiniuHeaders) {
     const canonicalName = name
       .toLowerCase()
-      .replace(/(^|-)([a-z])/g, (_match, prefix: string, character: string) =>
-        `${prefix}${character.toUpperCase()}`
+      .replace(
+        /(^|-)([a-z])/g,
+        (_match, prefix: string, character: string) =>
+          `${prefix}${character.toUpperCase()}`
       );
     value += `\n${canonicalName}: ${headerValue}`;
   }
@@ -205,12 +207,13 @@ async function qiniuRequest<T>(
   if (body !== undefined) headers.set("Content-Type", "application/json");
   headers.set(
     "X-Qiniu-Date",
-    new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z")
+    new Date()
+      .toISOString()
+      .replace(/[-:]/g, "")
+      .replace(/\.\d{3}Z$/, "Z")
   );
   const signing = qiniuSigningString(method, url, headers, body);
-  const signature = bytesToBase64Url(
-    await hmacSha1(config.secretKey, signing)
-  );
+  const signature = bytesToBase64Url(await hmacSha1(config.secretKey, signing));
   headers.set("Authorization", `Qiniu ${config.accessKey}:${signature}`);
 
   const response = await fetch(url, {
@@ -256,6 +259,10 @@ function jobKey(jobId: string): string {
 
 function activePlaylistKey(playlistId: string): string {
   return `${ACTIVE_PLAYLIST_KEY_PREFIX}${playlistId}`;
+}
+
+function activeTrackKey(hash: string): string {
+  return `${ACTIVE_TRACK_KEY_PREFIX}${hash}`;
 }
 
 function objectKey(config: QiniuAudioCacheConfig, hash: string): string {
@@ -307,9 +314,7 @@ function isTrackMatch(
     return false;
   }
 
-  const targetArtists = target.artist
-    .map(normalizeMatchText)
-    .filter(Boolean);
+  const targetArtists = target.artist.map(normalizeMatchText).filter(Boolean);
   const candidateArtists = candidate.artist
     .map(normalizeMatchText)
     .filter(Boolean);
@@ -466,7 +471,9 @@ function toCacheTrack(song: SongDetail): QiniuPlaylistTrack | null {
   const artist = Array.isArray(song.ar)
     ? song.ar
         .map((item) => item?.name)
-        .filter((value): value is string => typeof value === "string" && !!value)
+        .filter(
+          (value): value is string => typeof value === "string" && !!value
+        )
     : [];
   const name = typeof song.name === "string" ? song.name : "";
   const track: QiniuPlaylistTrack = {
@@ -520,21 +527,25 @@ async function waitForObject(
 ): Promise<{ contentType: string; byteSize?: number } | null> {
   const url = await privateDownloadUrl(config, objectKeyValue, 120);
   for (let attempt = 0; attempt < QINIU_FETCH_POLL_ATTEMPTS; attempt += 1) {
-    const response = await fetch(url, { headers: { Range: "bytes=0-0" } }).catch(
-      () => null
-    );
+    const response = await fetch(url, {
+      headers: { Range: "bytes=0-0" },
+    }).catch(() => null);
     if (response) {
       if (response.status === 200 || response.status === 206) {
         const byteSize = responseByteSize(response);
         await response.body?.cancel().catch(() => undefined);
         return {
-          contentType: normalizeContentType(response.headers.get("Content-Type")),
+          contentType: normalizeContentType(
+            response.headers.get("Content-Type")
+          ),
           ...(byteSize === undefined ? {} : { byteSize }),
         };
       }
       await response.body?.cancel().catch(() => undefined);
     }
-    await new Promise((resolve) => setTimeout(resolve, QINIU_FETCH_POLL_DELAY_MS));
+    await new Promise((resolve) =>
+      setTimeout(resolve, QINIU_FETCH_POLL_DELAY_MS)
+    );
   }
   return null;
 }
@@ -571,7 +582,11 @@ async function startQiniuFetch(
       file_type: 0,
     })
   );
-  if (typeof result.id !== "string" || result.id.length < 1 || result.id.length > 256) {
+  if (
+    typeof result.id !== "string" ||
+    result.id.length < 1 ||
+    result.id.length > 256
+  ) {
     throw new Error("QINIU_FETCH_NOT_ACCEPTED");
   }
 
@@ -582,7 +597,9 @@ async function startQiniuFetch(
       `/sisyphus/fetch?id=${encodeURIComponent(result.id)}`
     ).catch(() => null);
     if (status && status.wait === -1) return;
-    await new Promise((resolve) => setTimeout(resolve, QINIU_FETCH_POLL_DELAY_MS));
+    await new Promise((resolve) =>
+      setTimeout(resolve, QINIU_FETCH_POLL_DELAY_MS)
+    );
   }
 }
 
@@ -613,7 +630,10 @@ class QiniuAudioCache implements AudioCacheLike {
     };
   }
 
-  async serve(cacheKey: string, range?: string | null): Promise<Response | null> {
+  async serve(
+    cacheKey: string,
+    range?: string | null
+  ): Promise<Response | null> {
     if (!/^[a-f0-9]{64}$/.test(cacheKey) || !isValidRange(range)) return null;
     const record = await this.readRecord(cacheKey);
     if (!record || record.state !== "ready") return null;
@@ -639,7 +659,10 @@ class QiniuAudioCache implements AudioCacheLike {
       headers.set("Content-Length", BigInt(contentLength).toString());
     }
     const contentRange = response.headers.get("Content-Range");
-    if (contentRange && /^bytes \d{1,20}-\d{1,20}\/\d{1,20}$/.test(contentRange)) {
+    if (
+      contentRange &&
+      /^bytes \d{1,20}-\d{1,20}\/\d{1,20}$/.test(contentRange)
+    ) {
       headers.set("Content-Range", contentRange);
     }
     headers.set("Accept-Ranges", "bytes");
@@ -655,14 +678,18 @@ class QiniuAudioCache implements AudioCacheLike {
     playlistId: string,
     credential: string
   ): Promise<AudioCacheJobStatus> {
-    if (!isSafePlaylistId(playlistId)) throw new TypeError("Invalid NetEase playlist ID");
+    if (!isSafePlaylistId(playlistId))
+      throw new TypeError("Invalid NetEase playlist ID");
     const normalizedPlaylistId = normalizeId(playlistId);
     const activeId = await this.env.oh_file_url.get(
       activePlaylistKey(normalizedPlaylistId)
     );
     if (typeof activeId === "string") {
       const existing = await this.getJob(activeId);
-      if (existing && (existing.state === "queued" || existing.state === "running")) {
+      if (
+        existing &&
+        (existing.state === "queued" || existing.state === "running")
+      ) {
         return existing;
       }
     }
@@ -687,9 +714,49 @@ class QiniuAudioCache implements AudioCacheLike {
     return publicJob(job);
   }
 
+  async cacheNeteaseTrack(
+    track: AudioCacheNeteaseTrack,
+    credential: string
+  ): Promise<AudioCacheTrackState> {
+    const target: QiniuPlaylistTrack = {
+      id: normalizeId(track.id),
+      urlId: normalizeId(track.urlId ?? track.id),
+      name: track.name,
+      artist: track.artist,
+      ...(track.duration &&
+      Number.isFinite(track.duration) &&
+      track.duration > 0
+        ? { duration: track.duration }
+        : {}),
+    };
+    if (!/^\d{1,20}$/.test(target.id) || !isSafeCacheTrack(target)) {
+      throw new TypeError("Invalid NetEase track");
+    }
+    const hash = await hashTargetKey(
+      canonicalTargetKey({ source: "_netease", id: target.id })
+    );
+    if (await this.readRecord(hash)) return "cached";
+    const inflightKey = activeTrackKey(hash);
+    if ((await this.env.oh_file_url.get(inflightKey)) !== null)
+      return "pending";
+    await this.env.oh_file_url.put(inflightKey, "1", {
+      expirationTtl: ACTIVE_TRACK_TTL_SECONDS,
+    });
+    this.waitUntil(
+      this.prefetchTrack(target, credential)
+        .catch(() => "failed" as const)
+        .finally(() =>
+          this.env.oh_file_url.delete(inflightKey).catch(() => undefined)
+        )
+    );
+    return "queued";
+  }
+
   async getJob(jobId: string): Promise<AudioCacheJobStatus | null> {
     if (!/^[a-f0-9]{32}$/.test(jobId)) return null;
-    const value = await this.env.oh_file_url.get(jobKey(jobId), { type: "json" });
+    const value = await this.env.oh_file_url.get(jobKey(jobId), {
+      type: "json",
+    });
     if (!value || typeof value !== "object") return null;
     return publicJob(value as QiniuAudioCacheJob);
   }
@@ -754,7 +821,9 @@ class QiniuAudioCache implements AudioCacheLike {
 
       await Promise.all(
         Array.from(
-          { length: Math.min(CACHE_JOB_CONCURRENCY, Math.max(1, tracks.length)) },
+          {
+            length: Math.min(CACHE_JOB_CONCURRENCY, Math.max(1, tracks.length)),
+          },
           () => worker()
         )
       );
@@ -767,7 +836,9 @@ class QiniuAudioCache implements AudioCacheLike {
       credentialForRun = "";
       job.finishedAt = Date.now();
       await this.writeJob(job).catch(() => undefined);
-      await this.env.oh_file_url.delete(activePlaylistKey(job.playlistId)).catch(() => undefined);
+      await this.env.oh_file_url
+        .delete(activePlaylistKey(job.playlistId))
+        .catch(() => undefined);
     }
   }
 
@@ -872,7 +943,9 @@ class QiniuAudioCache implements AudioCacheLike {
           GENERIC_SOURCES.map((source) => genericSearch(source, target))
         );
         const candidateKeys = new Set(
-          candidates.map((candidate) => `${candidate.source}:${candidate.urlId}`)
+          candidates.map(
+            (candidate) => `${candidate.source}:${candidate.urlId}`
+          )
         );
         for (const candidate of alternatives.flat()) {
           const key = `${candidate.source}:${candidate.urlId}`;

@@ -80,7 +80,9 @@ describe("Qiniu audio cache adapter", () => {
       urlId: "123",
     });
 
-    expect(result?.path).toMatch(/^\/music-api\/cache\/audio\?key=[a-f0-9]{64}$/);
+    expect(result?.path).toMatch(
+      /^\/music-api\/cache\/audio\?key=[a-f0-9]{64}$/
+    );
     expect(result?.storedBr).toBe(192);
   });
 
@@ -96,18 +98,16 @@ describe("Qiniu audio cache adapter", () => {
       contentType: "audio/mpeg",
       createdAt: Date.now(),
     });
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response("x", {
-          status: 206,
-          headers: {
-            "Content-Type": "audio/mpeg; charset=utf-8",
-            "Content-Length": "1",
-            "Content-Range": "bytes 0-0/123",
-          },
-        })
-      );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("x", {
+        status: 206,
+        headers: {
+          "Content-Type": "audio/mpeg; charset=utf-8",
+          "Content-Length": "1",
+          "Content-Range": "bytes 0-0/123",
+        },
+      })
+    );
     const cache = createQiniuAudioCache(env, vi.fn());
 
     const response = await cache?.serve(cacheKey, "bytes=0-0");
@@ -141,7 +141,10 @@ describe("Qiniu audio cache adapter", () => {
     });
     const cache = createQiniuAudioCache(env, waitUntil);
 
-    const job = await cache?.startNeteasePlaylistJob("neplaylist_123", "MUSIC_U=x");
+    const job = await cache?.startNeteasePlaylistJob(
+      "neplaylist_123",
+      "MUSIC_U=x"
+    );
 
     expect(["queued", "running"]).toContain(job?.state);
     expect(waitUntil).toHaveBeenCalledOnce();
@@ -151,5 +154,66 @@ describe("Qiniu audio cache adapter", () => {
     );
     expect(jobWrites.length).toBeGreaterThanOrEqual(2);
     expect(String(jobWrites.at(-1)?.[1])).toContain('"state":"completed"');
+  });
+
+  describe("single NetEase track caching", () => {
+    const track = { id: "123", name: "Song", artist: ["Artist"] };
+
+    it("queues one background fetch and releases its in-flight lock", async () => {
+      const { env, kv } = createEnv();
+      kv.get.mockResolvedValue(null);
+      netease.getSongUrl.mockResolvedValue(null);
+      vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+      let background: Promise<unknown> | undefined;
+      const waitUntil = vi.fn((promise: Promise<unknown>) => {
+        background = promise;
+      });
+      const cache = createQiniuAudioCache(env, waitUntil);
+
+      await expect(cache?.cacheNeteaseTrack(track, "MUSIC_U=x")).resolves.toBe(
+        "queued"
+      );
+      expect(waitUntil).toHaveBeenCalledOnce();
+      const lockKey = kv.put.mock.calls.find(([key]) =>
+        String(key).startsWith("audio-cache-track:v1:")
+      )?.[0];
+      expect(lockKey).toBeDefined();
+      await background;
+      expect(netease.getSongUrl).toHaveBeenCalledWith(
+        "123",
+        320_000,
+        "MUSIC_U=x"
+      );
+      expect(kv.delete).toHaveBeenCalledWith(lockKey);
+    });
+
+    it("skips tracks that are already stored or already being stored", async () => {
+      const { env, kv } = createEnv();
+      const waitUntil = vi.fn();
+      const cache = createQiniuAudioCache(env, waitUntil);
+
+      kv.get.mockResolvedValueOnce({
+        version: 1,
+        state: "ready",
+        targetKey: "netease:123",
+        objectKey: "otter-music-cache/v1/abc",
+        storedBr: 320,
+      });
+      await expect(cache?.cacheNeteaseTrack(track, "")).resolves.toBe("cached");
+
+      kv.get.mockResolvedValueOnce(null).mockResolvedValueOnce("1");
+      await expect(cache?.cacheNeteaseTrack(track, "")).resolves.toBe(
+        "pending"
+      );
+      expect(waitUntil).not.toHaveBeenCalled();
+    });
+
+    it("rejects non-NetEase identifiers", async () => {
+      const { env } = createEnv();
+      const cache = createQiniuAudioCache(env, vi.fn());
+      await expect(
+        cache?.cacheNeteaseTrack({ ...track, id: "abc" }, "")
+      ).rejects.toBeInstanceOf(TypeError);
+    });
   });
 });

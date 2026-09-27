@@ -50,7 +50,8 @@ const AUDIO_CACHE_SOURCES = new Set([
   "bilibili",
 ]);
 const AUDIO_CACHE_ID_PATTERN = /^[A-Za-z0-9._~:+/=-]{1,256}$/;
-const AUDIO_CACHE_PLAYLIST_ID_PATTERN = /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
+const AUDIO_CACHE_PLAYLIST_ID_PATTERN =
+  /^(?:(?:neplaylist|ne_playlist)_)?\d{1,20}$/;
 type MusicContext = Context<{ Bindings: Env }>;
 
 function resolveAudioCache(c: MusicContext) {
@@ -488,6 +489,67 @@ musicRoutes.post("/cache/netease-playlist", async (c) => {
       )
     );
   } catch {
+    return c.json({ error: "Audio cache unavailable" }, 503);
+  }
+});
+
+musicRoutes.post("/cache/netease-track", async (c) => {
+  const cache = resolveAudioCache(c);
+  if (!cache) return c.json({ error: "Audio cache unavailable" }, 404);
+  const body = await c.req.json<unknown>().catch(() => null);
+  const record =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as Record<string, unknown>)
+      : null;
+  if (
+    !record ||
+    Object.keys(record).some(
+      (key) => !["id", "urlId", "name", "artist", "duration"].includes(key)
+    ) ||
+    !isAudioCacheIdentifier(record.id) ||
+    (record.urlId !== undefined && !isAudioCacheIdentifier(record.urlId)) ||
+    typeof record.name !== "string" ||
+    !Array.isArray(record.artist) ||
+    !record.artist.every(
+      (item) =>
+        typeof item === "string" && item.length > 0 && item.length <= 256
+    ) ||
+    (record.duration !== undefined &&
+      (typeof record.duration !== "number" ||
+        !Number.isFinite(record.duration)))
+  ) {
+    return c.json({ error: "Invalid audio cache request" }, 400);
+  }
+
+  try {
+    const session = await readNeteaseSession(c.env, c.req.header("Cookie"));
+    if (!session) return c.json({ error: "Unauthorized" }, 401);
+    const rate = await checkFixedWindowRateLimit(
+      c.env.oh_file_url,
+      "audio-cache-track",
+      requestClientId(c.req.raw.headers),
+      60,
+      600
+    );
+    if (!rate.allowed) {
+      c.header("Retry-After", String(rate.retryAfterSeconds));
+      return c.json({ error: "Too many audio cache requests" }, 429);
+    }
+    const state = await cache.cacheNeteaseTrack(
+      {
+        id: record.id as string,
+        urlId: record.urlId as string | undefined,
+        name: record.name,
+        artist: record.artist as string[],
+        duration: record.duration as number | undefined,
+      },
+      session.credential
+    );
+    return c.json({ state }, state === "queued" ? 202 : 200);
+  } catch (error) {
+    if (error instanceof TypeError) {
+      return c.json({ error: "Invalid audio cache request" }, 400);
+    }
     return c.json({ error: "Audio cache unavailable" }, 503);
   }
 });

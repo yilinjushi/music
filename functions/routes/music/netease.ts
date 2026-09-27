@@ -4,7 +4,9 @@ import type { Env } from "../../types/hono";
 import {
   createNeteaseSession,
   deleteNeteaseSession,
+  NETEASE_SESSION_COOKIE,
   readNeteaseSession,
+  renewNeteaseSession,
   serializeExpiredSessionCookie,
   serializeSessionCookie,
 } from "../../utils/netease-session";
@@ -631,6 +633,21 @@ neteaseRoutes.get("/session/me", async (c) => {
   if (!session) {
     c.header("Set-Cookie", serializeExpiredSessionCookie());
     return privateJson(c, { authenticated: false }, 401);
+  }
+  const cookieHeader = c.req.header("Cookie");
+  const renewedMaxAge = await renewNeteaseSession(c.env, cookieHeader).catch(
+    () => null
+  );
+  const token = cookieHeader
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${NETEASE_SESSION_COOKIE}=`))
+    ?.slice(NETEASE_SESSION_COOKIE.length + 1);
+  if (renewedMaxAge !== null && token) {
+    c.header(
+      "Set-Cookie",
+      serializeSessionCookie(decodeURIComponent(token), renewedMaxAge)
+    );
   }
   return privateJson(c, { authenticated: true, profile: session.profile });
 });

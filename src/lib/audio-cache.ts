@@ -4,11 +4,7 @@ import { fetchWithTimeout } from "@/lib/api/config";
 const CACHE_PREFIX = "/music-api/cache";
 const OPAQUE_ID_PATTERN = /^[A-Za-z0-9._~:+/=-]{1,256}$/;
 
-export type AudioCacheJobState =
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed";
+export type AudioCacheJobState = "queued" | "running" | "completed" | "failed";
 
 export interface AudioCacheJobStatus {
   jobId: string;
@@ -70,6 +66,49 @@ export async function lookupAudioCache(
     // Cache availability must never make an otherwise playable provider fail.
     return null;
   }
+}
+
+const NETEASE_TRACK_ID_PATTERN = /^\d{1,20}$/;
+const requestedTrackCaches = new Set<string>();
+let trackCacheDisabled = false;
+
+/**
+ * 请求服务端在后台缓存一首网易云歌曲。每个会话每首歌最多请求一次；
+ * 未登录、未配置对象存储或被限流时静默停止，绝不影响播放。
+ */
+export function requestNeteaseTrackCache(track: MusicTrack): void {
+  if (trackCacheDisabled) return;
+  if (track.source !== "_netease" && track.source !== "netease") return;
+  if (!NETEASE_TRACK_ID_PATTERN.test(track.id)) return;
+  const artist = track.artist.filter((name) => name.length > 0).slice(0, 16);
+  if (!track.name || artist.length === 0) return;
+  if (requestedTrackCaches.has(track.id)) return;
+  requestedTrackCaches.add(track.id);
+
+  void fetchWithTimeout(
+    `${CACHE_PREFIX}/netease-track`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: track.id,
+        name: track.name.slice(0, 512),
+        artist,
+      }),
+      credentials: "include",
+      cache: "no-store",
+    },
+    5_000
+  )
+    .then((response) => {
+      if (response.status === 404) trackCacheDisabled = true;
+      if (response.status === 401 || response.status === 429) {
+        requestedTrackCaches.delete(track.id);
+      }
+    })
+    .catch(() => {
+      requestedTrackCaches.delete(track.id);
+    });
 }
 
 async function readJobResponse(
