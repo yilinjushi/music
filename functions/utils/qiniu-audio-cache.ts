@@ -28,6 +28,7 @@ const ACTIVE_TRACK_TTL_SECONDS = 10 * 60;
 const PLAYLIST_STATE_KEY_PREFIX = "audio-cache-playlist-state:v1:";
 // Per-run cap on reading per-song records left by the play-time cache path.
 const SYNC_LEGACY_RECORD_CHECKS = 40;
+const SYNC_SUBMIT_CONCURRENCY = 4;
 const PLAYLIST_STATUS_KEY_PREFIX = "audio-cache-playlist-status:v1:";
 const PLAYLIST_TRACKS_KEY_PREFIX = "audio-cache-playlist-tracks:v1:";
 const PLAYLIST_TRACKS_FULL_REFRESH_MS = 6 * 60 * 60_000;
@@ -900,6 +901,7 @@ class QiniuAudioCache implements AudioCacheLike {
           : {},
     };
     let legacyChecksLeft = SYNC_LEGACY_RECORD_CHECKS;
+    const submitQueue: Array<() => Promise<void>> = [];
 
     const result: AudioCacheSyncResult = {
       total: tracks.length,
@@ -986,63 +988,86 @@ class QiniuAudioCache implements AudioCacheLike {
         result.remaining += 1;
         continue;
       }
-      const objectKeyValue = objectKey(this.config, hash);
-      // Quality ladder: 320k first, then 192k, then 128k. Trial clips are
-      // rejected, so only complete songs are ever stored.
-      let source = await resolveNeteaseSource(track, 320, credential);
-      if (!source && spend(2)) {
-        const alternatives = (
-          await Promise.all(
-            GENERIC_SOURCES.map((genericSource) =>
-              genericSearch(genericSource, track)
+      const trackMiss = miss;
+      submitQueue.push(async () => {
+        const objectKeyValue = objectKey(this.config, hash);
+        // Quality ladder: 320k first, then 192k, then 128k. Trial clips are
+        // rejected, so only complete songs are ever stored.
+        let source = await resolveNeteaseSource(track, 320, credential);
+        if (!source && spend(2)) {
+          const alternatives = (
+            await Promise.all(
+              GENERIC_SOURCES.map((genericSource) =>
+                genericSearch(genericSource, track)
+              )
             )
           )
-        )
-          .flat()
-          .filter(
-            (candidate) =>
-              candidate.source === "joox" || candidate.source === "kuwo"
-          );
-        const best = alternatives[0];
-        if (best) {
-          for (const br of CACHE_QUALITIES) {
-            if (!spend(1)) break;
-            const url = await genericUrl(
-              best.source as GenericSource,
-              best.urlId,
-              br
+            .flat()
+            .filter(
+              (candidate) =>
+                candidate.source === "joox" || candidate.source === "kuwo"
             );
-            if (url) {
-              source = { url, br };
-              break;
+          const best = alternatives[0];
+          if (best) {
+            for (const br of CACHE_QUALITIES) {
+              if (!spend(1)) break;
+              const url = await genericUrl(
+                best.source as GenericSource,
+                best.urlId,
+                br
+              );
+              if (url) {
+                source = { url, br };
+                break;
+              }
             }
           }
         }
-      }
 
-      if (!source) {
-        const rounds = (miss?.rounds ?? 0) + 1;
-        state.miss[track.id] = { rounds, at: Date.now() };
-        if (rounds >= MISS_ROUNDS_BEFORE_UNAVAILABLE) {
-          result.unavailable.push(track.id);
+        if (!source) {
+          const rounds = (trackMiss?.rounds ?? 0) + 1;
+          state.miss[track.id] = { rounds, at: Date.now() };
+          if (rounds >= MISS_ROUNDS_BEFORE_UNAVAILABLE) {
+            result.unavailable.push(track.id);
+          } else {
+            result.remaining += 1;
+          }
+          return;
+        }
+
+        if (await submitQiniuFetch(this.config, source.url, objectKeyValue)) {
+          state.pending[track.id] = {
+            objectKey: objectKeyValue,
+            br: source.br,
+            submittedAt: Date.now(),
+          };
+          result.submitted += 1;
+          result.pending += 1;
         } else {
           result.remaining += 1;
         }
-        continue;
-      }
-
-      if (await submitQiniuFetch(this.config, source.url, objectKeyValue)) {
-        state.pending[track.id] = {
-          objectKey: objectKeyValue,
-          br: source.br,
-          submittedAt: Date.now(),
-        };
-        result.submitted += 1;
-        result.pending += 1;
-      } else {
-        result.remaining += 1;
-      }
+      });
     }
+
+    // Resolve sources and submit downloads in parallel: NetEase URL lookups
+    // with the owner's cookie are slow, so doing them one by one used up the
+    // whole time budget after a single song.
+    let nextTask = 0;
+    await Promise.all(
+      Array.from({ length: SYNC_SUBMIT_CONCURRENCY }, async () => {
+        while (nextTask < submitQueue.length) {
+          const task = submitQueue[nextTask];
+          nextTask += 1;
+          if (outOfTime()) {
+            result.remaining += 1;
+            continue;
+          }
+          await task().catch(() => {
+            result.remaining += 1;
+          });
+        }
+      })
+    );
 
     await this.env.oh_file_url.put(stateKey, JSON.stringify(state));
     await this.env.oh_file_url.put(

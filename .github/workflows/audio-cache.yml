@@ -1,12 +1,12 @@
 name: Audio cache sync
 
-# Every 10 minutes, ask the site to cache the next batch of 红心 songs into
+# Every 5 minutes, ask the site to cache the next batch of 红心 songs into
 # Qiniu. Each call is bounded (~20s, <=40 subrequests) so it stays inside the
 # Cloudflare free plan; repeated calls work through the whole list.
 # Authenticates with this repository's GitHub OIDC token: no secret to set.
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
