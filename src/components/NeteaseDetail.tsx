@@ -256,10 +256,30 @@ export function NeteaseDetail({
     }
   };
 
+  // Songs in the latest list that are neither cached nor known sourceless.
+  // Uses the live track count so newly liked songs are included right away.
+  const uncachedCount = cacheStatus
+    ? Math.max(
+        0,
+        (detail?.trackCount ?? cacheStatus.total) -
+          cacheStatus.ready -
+          cacheStatus.unavailable.length
+      )
+    : null;
+
   const handleCachePlaylist = () => {
     if (!id || type !== "playlist" || !authenticated) return;
+    if (uncachedCount === 0) {
+      toast.success("全部歌曲都已缓存，无需手动缓存");
+      return;
+    }
     requestNeteasePlaylistSync(id);
-    toast.success("已在后台继续缓存，会自动分批完成");
+    toast.success(
+      uncachedCount === null
+        ? "已开始缓存，已缓存的歌曲会自动跳过"
+        : `还有 ${uncachedCount} 首未缓存，已开始缓存（已缓存的自动跳过，后台分批完成）`,
+      { duration: 5000 }
+    );
   };
 
   const handleToggleAlbumSub = async () => {
@@ -480,12 +500,11 @@ export function NeteaseDetail({
           {authenticated && type === "playlist" && (
             <DropdownMenuItem onClick={handleCachePlaylist}>
               <Download className="w-4 h-4 mr-2" />
-              {cacheStatus
-                ? cacheStatus.ready + cacheStatus.unavailable.length >=
-                  cacheStatus.total
-                  ? `已全部缓存 ${cacheStatus.ready}/${cacheStatus.total}`
-                  : `缓存中 ${cacheStatus.ready}/${cacheStatus.total}`
-                : "缓存到云端"}
+              {uncachedCount === null
+                ? "缓存到云端"
+                : uncachedCount === 0
+                  ? "已全部缓存"
+                  : `缓存到云端（还有 ${uncachedCount} 首未缓存）`}
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -515,13 +534,12 @@ export function NeteaseDetail({
     >
       {cacheStatus && type === "playlist" && (
         <div className="mx-4 mb-2 border-l-4 border-primary px-3 py-1 text-sm text-muted-foreground">
-          云端缓存 {cacheStatus.ready}/{cacheStatus.total}
+          已缓存 {cacheStatus.ready} 首
+          {uncachedCount
+            ? `，还有 ${uncachedCount} 首未缓存（后台分批进行中）`
+            : "，已全部缓存"}
           {cacheStatus.unavailable.length > 0 &&
-            `，无音源已隐藏 ${cacheStatus.unavailable.length}`}
-          {cacheStatus.ready + cacheStatus.unavailable.length >=
-          cacheStatus.total
-            ? "（已全部完成）"
-            : "（后台分批进行中）"}
+            `，无音源已隐藏 ${cacheStatus.unavailable.length} 首`}
         </div>
       )}
       <div className="flex-1 min-h-0">
