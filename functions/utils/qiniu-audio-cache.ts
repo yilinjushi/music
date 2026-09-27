@@ -13,7 +13,7 @@ import type {
   Env,
 } from "../types/hono";
 import {
-  getPlaylistDetail,
+  getPlaylistDetailPreferAnonymous,
   getSongUrl,
   NETEASE_PLAYLIST_MAX_TOTAL_TRACKS,
   NETEASE_PLAYLIST_PAGE_SIZE,
@@ -28,6 +28,8 @@ const ACTIVE_TRACK_TTL_SECONDS = 10 * 60;
 const PENDING_KEY_PREFIX = "audio-cache-pending:v1:";
 const MISS_KEY_PREFIX = "audio-cache-miss:v1:";
 const PLAYLIST_STATUS_KEY_PREFIX = "audio-cache-playlist-status:v1:";
+const PLAYLIST_TRACKS_KEY_PREFIX = "audio-cache-playlist-tracks:v1:";
+const PLAYLIST_TRACKS_FULL_REFRESH_MS = 6 * 60 * 60_000;
 // A track with no complete source is retried on later runs; after this many
 // failed rounds it is reported as unavailable (and re-checked after the TTL).
 const MISS_ROUNDS_BEFORE_UNAVAILABLE = 3;
@@ -865,12 +867,8 @@ class QiniuAudioCache implements AudioCacheLike {
       return true;
     };
 
-    const tracks = await this.loadPlaylistTracks(
-      normalizedPlaylistId,
-      credential
-    );
-    subrequestsLeft -=
-      Math.ceil(tracks.length / NETEASE_PLAYLIST_PAGE_SIZE) + 1;
+    const tracks = await this.loadSyncTracks(normalizedPlaylistId, credential);
+    subrequestsLeft -= 2;
 
     const result: AudioCacheSyncResult = {
       total: tracks.length,
@@ -1149,6 +1147,49 @@ class QiniuAudioCache implements AudioCacheLike {
     }
   }
 
+  /**
+   * Track list for the sync: the first page (newest likes) is always read
+   * fresh; the rest comes from a saved copy refreshed every few hours, so a
+   * run does not spend its whole time budget re-reading 300+ songs.
+   */
+  private async loadSyncTracks(
+    playlistId: string,
+    credential: string
+  ): Promise<QiniuPlaylistTrack[]> {
+    const key = PLAYLIST_TRACKS_KEY_PREFIX + playlistId;
+    const saved = (await this.env.oh_file_url.get(key, { type: "json" })) as {
+      tracks?: QiniuPlaylistTrack[];
+      at?: number;
+    } | null;
+    const savedTracks = Array.isArray(saved?.tracks) ? saved.tracks : null;
+    if (
+      !savedTracks ||
+      typeof saved?.at !== "number" ||
+      Date.now() - saved.at > PLAYLIST_TRACKS_FULL_REFRESH_MS
+    ) {
+      const full = await this.loadPlaylistTracks(playlistId, credential);
+      await this.env.oh_file_url.put(
+        key,
+        JSON.stringify({ tracks: full, at: Date.now() })
+      );
+      return full;
+    }
+
+    const firstPage = await getPlaylistDetailPreferAnonymous(
+      playlistId,
+      credential,
+      { offset: 0, limit: NETEASE_PLAYLIST_PAGE_SIZE }
+    );
+    const fresh = (firstPage.tracks ?? [])
+      .map((song) => toCacheTrack(song))
+      .filter((track): track is QiniuPlaylistTrack => track !== null);
+    const freshIds = new Set(fresh.map((track) => track.id));
+    return [
+      ...fresh,
+      ...savedTracks.filter((track) => !freshIds.has(track.id)),
+    ];
+  }
+
   private async loadPlaylistTracks(
     playlistId: string,
     credential: string
@@ -1161,10 +1202,14 @@ class QiniuAudioCache implements AudioCacheLike {
       page <= NETEASE_PLAYLIST_MAX_TOTAL_TRACKS / NETEASE_PLAYLIST_PAGE_SIZE;
       page += 1
     ) {
-      const detail = await getPlaylistDetail(playlistId, credential, {
-        offset,
-        limit: NETEASE_PLAYLIST_PAGE_SIZE,
-      });
+      const detail = await getPlaylistDetailPreferAnonymous(
+        playlistId,
+        credential,
+        {
+          offset,
+          limit: NETEASE_PLAYLIST_PAGE_SIZE,
+        }
+      );
       for (const song of detail.tracks ?? []) {
         const track = toCacheTrack(song);
         if (!track || seen.has(track.id)) continue;

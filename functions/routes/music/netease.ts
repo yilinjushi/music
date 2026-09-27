@@ -14,7 +14,7 @@ import {
   getSongUrl,
   proxyNeteaseAudio,
   getUserPlaylists,
-  getPlaylistDetail,
+  getPlaylistDetailPreferAnonymous,
   getPlaylistDynamicDetail,
   getQrKey,
   checkQrStatus,
@@ -736,10 +736,14 @@ neteaseRoutes.post("/playlist", async (c) => {
   if (limited) return limited;
   const session = await currentSession(c);
   try {
-    const res = await getPlaylistDetail(playlistId, session?.credential || "", {
-      offset,
-      limit,
-    });
+    const res = await getPlaylistDetailPreferAnonymous(
+      playlistId,
+      session?.credential || "",
+      {
+        offset,
+        limit,
+      }
+    );
     const safeDetail = sanitizePlaylistDetailForClient(res);
     if (!safeDetail) return upstreamFailure(c);
     return privateJson(c, safeDetail);

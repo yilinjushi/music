@@ -35,7 +35,12 @@ const api = vi.hoisted(() => ({
   toggleSubPlaylist: vi.fn(),
 }));
 
-vi.mock("../../utils/music/netease-api", () => api);
+vi.mock("../../utils/music/netease-api", () => ({
+  ...api,
+  getPlaylistDetailPreferAnonymous: (
+    ...args: Parameters<typeof api.getPlaylistDetail>
+  ) => api.getPlaylistDetail(...args),
+}));
 
 import { neteaseRoutes } from "./netease";
 

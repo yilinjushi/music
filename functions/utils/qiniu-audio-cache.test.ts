@@ -11,6 +11,8 @@ vi.mock("./music/netease-api", () => ({
   NETEASE_PLAYLIST_MAX_TOTAL_TRACKS: 20_000,
   NETEASE_PLAYLIST_PAGE_SIZE: 100,
   getPlaylistDetail: netease.getPlaylistDetail,
+  getPlaylistDetailPreferAnonymous: (...args: unknown[]) =>
+    netease.getPlaylistDetail(...args),
   getSongUrl: netease.getSongUrl,
 }));
 

@@ -344,6 +344,29 @@ export async function getPlaylistDetail(
   } as PlaylistDetail;
 }
 
+/**
+ * Playlist reads are much faster anonymously (~5s) than with the owner's
+ * cookie (often 20s+, which blew the 25s budget and broke "加载更多"). Public
+ * playlists — including 我喜欢的音乐 — are read anonymously first; the cookie
+ * is only used when the anonymous read fails (e.g. a private playlist).
+ */
+export async function getPlaylistDetailPreferAnonymous(
+  playlistId: string,
+  cookie: string,
+  options: NeteasePlaylistPageOptions = {}
+): Promise<PlaylistDetail> {
+  if (!cookie) return getPlaylistDetail(playlistId, "", options);
+  try {
+    const anonymous = await getPlaylistDetail(playlistId, "", options);
+    if (Array.isArray(anonymous.tracks) && anonymous.tracks.length > 0) {
+      return anonymous;
+    }
+  } catch {
+    // Fall through to the authenticated read.
+  }
+  return getPlaylistDetail(playlistId, cookie, options);
+}
+
 export interface NeteasePlaylistPageOptions {
   offset?: number;
   limit?: number;
