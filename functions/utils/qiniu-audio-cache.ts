@@ -608,14 +608,21 @@ const R2_MAX_OBJECT_BYTES = 80 * 1024 * 1024;
  * Download `sourceUrl` and stream it into R2 under `key`. R2 has free egress,
  * so playback costs nothing no matter where the Worker runs.
  */
+/** Why the last R2 store failed (surfaced in sync results for debugging). */
+let lastStoreError = "";
+
 async function storeInR2(
   r2: R2BucketLike,
   sourceUrl: string,
   key: string
 ): Promise<{ contentType: string; byteSize: number } | null> {
-  const response = await fetch(sourceUrl).catch(() => null);
+  const response = await fetch(sourceUrl).catch((error: unknown) => {
+    lastStoreError = `fetch: ${String(error).slice(0, 120)}`;
+    return null;
+  });
   if (!response) return null;
   const size = response.status === 200 ? responseByteSize(response) : undefined;
+  lastStoreError = `status ${response.status} size ${size ?? "?"}`;
   if (
     !response.body ||
     size === undefined ||
@@ -638,7 +645,10 @@ async function storeInR2(
     : response.body;
   const stored = await r2
     .put(key, body, { httpMetadata: { contentType } })
-    .catch(() => null);
+    .catch((error: unknown) => {
+      lastStoreError = `put: ${String(error).slice(0, 120)}`;
+      return null;
+    });
   return stored ? { contentType, byteSize: size } : null;
 }
 
@@ -1177,7 +1187,10 @@ class QiniuAudioCache implements AudioCacheLike {
       })
     );
 
-    if (this.r2) result.migrating = migrating;
+    if (this.r2) {
+      result.migrating = migrating;
+      if (migrating && lastStoreError) result.note = lastStoreError;
+    }
     await this.env.oh_file_url.put(stateKey, JSON.stringify(state));
     await this.env.oh_file_url.put(
       PLAYLIST_STATUS_KEY_PREFIX + normalizedPlaylistId,

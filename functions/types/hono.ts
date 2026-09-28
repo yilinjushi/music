@@ -79,6 +79,7 @@ export interface AudioCacheSyncResult {
   remaining: number;
   /** cached songs not yet copied from Qiniu to R2 */
   migrating?: number;
+  note?: string;
 }
 
 export interface AudioCacheLike {
