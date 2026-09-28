@@ -135,4 +135,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Wrangler 4 reads wrangler.jsonc (incl. the R2 binding); the
+          # action's fallback 3.90 ignores it.
+          wranglerVersion: "4.142.0"
           command: pages deploy dist --project-name music --branch main --commit-hash ${{ github.sha }} --commit-dirty=false
