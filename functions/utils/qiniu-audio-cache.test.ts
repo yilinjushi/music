@@ -219,6 +219,44 @@ describe("Qiniu audio cache adapter", () => {
     });
   });
 
+  it("serves from R2 without touching Qiniu when the object is there", async () => {
+    const { env, kv } = createEnv();
+    kv.get.mockResolvedValue({
+      version: 1,
+      state: "ready",
+      targetKey: "netease:123",
+      objectKey: "otter-music-cache/v1/object.audio",
+      storedBr: 320,
+      contentType: "audio/mpeg",
+      createdAt: Date.now(),
+    });
+    const r2 = {
+      head: vi.fn(),
+      put: vi.fn(),
+      get: vi.fn().mockResolvedValue({
+        size: 123,
+        range: { offset: 10, length: 5 },
+        httpMetadata: { contentType: "audio/mpeg" },
+        body: new Response("hello").body,
+      }),
+    };
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const cache = createQiniuAudioCache(
+      { ...env, AUDIO_R2: r2 } as unknown as Env,
+      vi.fn()
+    );
+
+    const response = await cache?.serve("a".repeat(64), "bytes=10-14");
+
+    expect(r2.get).toHaveBeenCalledWith("otter-music-cache/v1/object.audio", {
+      range: { offset: 10, length: 5 },
+    });
+    expect(response?.status).toBe(206);
+    expect(response?.headers.get("Content-Range")).toBe("bytes 10-14/123");
+    expect(response?.headers.get("Content-Length")).toBe("5");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   describe("bounded playlist sync", () => {
     function playlistWith(id: number) {
       netease.getPlaylistDetail.mockResolvedValue({
@@ -298,6 +336,61 @@ describe("Qiniu audio cache adapter", () => {
       expect(
         [...store.keys()].some((key) => key.startsWith("audio-cache:v1:"))
       ).toBe(true);
+    });
+
+    it("with R2, stores new songs directly and copies Qiniu songs over", async () => {
+      const { env, kv } = createEnv();
+      const store = memoryKv(kv);
+      playlistWith(123);
+      netease.getSongUrl.mockResolvedValue({
+        data: {
+          data: [
+            { url: "https://m701.music.126.net/a.mp3", freeTrialInfo: null },
+          ],
+        },
+      });
+      const audio = () =>
+        new Response(new Uint8Array(100 * 1024), {
+          status: 200,
+          headers: {
+            "Content-Type": "audio/mpeg",
+            "Content-Length": String(100 * 1024),
+          },
+        });
+      vi.spyOn(globalThis, "fetch").mockImplementation(async () => audio());
+      const r2 = {
+        get: vi.fn(),
+        head: vi.fn().mockResolvedValue(null),
+        put: vi.fn().mockResolvedValue({ size: 100 * 1024 }),
+      };
+      const cache = createQiniuAudioCache(
+        { ...env, AUDIO_R2: r2 } as unknown as Env,
+        vi.fn()
+      )!;
+
+      const first = await cache.syncNeteasePlaylist(
+        "neplaylist_1",
+        "MUSIC_U=x"
+      );
+      expect(first).toMatchObject({ ready: 1, pending: 0, migrating: 0 });
+      expect(r2.put).toHaveBeenCalledTimes(1);
+
+      // A song cached in Qiniu before R2 existed gets copied on the next run.
+      const stateKey = [...store.keys()].find((key) =>
+        key.startsWith("audio-cache-playlist-state:v1:")
+      )!;
+      store.set(
+        stateKey,
+        JSON.stringify({ ready: { "123": 320 }, miss: {}, pending: {} })
+      );
+      const second = await cache.syncNeteasePlaylist(
+        "neplaylist_1",
+        "MUSIC_U=x"
+      );
+      expect(second).toMatchObject({ ready: 1, migrating: 0 });
+      expect(r2.head).toHaveBeenCalledTimes(1);
+      expect(r2.put).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(store.get(stateKey)!).r2).toEqual({ "123": 1 });
     });
 
     it("never caches a NetEase trial clip and reports songs with no source", async () => {

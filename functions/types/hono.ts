@@ -9,6 +9,31 @@ export interface KVNamespace {
   ): Promise<{ value: any; metadata: T | null }>;
 }
 
+export interface R2ObjectLike {
+  size: number;
+  range?: { offset?: number; length?: number; suffix?: number };
+  httpMetadata?: { contentType?: string };
+}
+
+export interface R2ObjectBodyLike extends R2ObjectLike {
+  body: ReadableStream;
+}
+
+export interface R2BucketLike {
+  head(key: string): Promise<R2ObjectLike | null>;
+  get(
+    key: string,
+    options?: {
+      range?: { offset: number; length?: number } | { suffix: number };
+    }
+  ): Promise<R2ObjectBodyLike | null>;
+  put(
+    key: string,
+    value: ReadableStream | ArrayBuffer | string,
+    options?: { httpMetadata?: { contentType?: string } }
+  ): Promise<R2ObjectLike | null>;
+}
+
 export interface AudioCacheTrackReference {
   source: string;
   id: string;
@@ -52,6 +77,8 @@ export interface AudioCacheSyncResult {
   submitted: number;
   unavailable: string[];
   remaining: number;
+  /** cached songs not yet copied from Qiniu to R2 */
+  migrating?: number;
 }
 
 export interface AudioCacheLike {
@@ -83,6 +110,8 @@ export type Env = {
   oh_file_url: KVNamespace;
   SESSION_KV: KVNamespace;
   AUDIO_CACHE?: AudioCacheLike;
+  /** Cloudflare R2 bucket for cached audio (free egress). */
+  AUDIO_R2?: R2BucketLike;
   NETEASE_SESSION_HMAC_SECRET: string;
   NETEASE_CREDENTIAL_ENC_KEY: string;
   NETEASE_SESSION_TTL_SECONDS?: string;

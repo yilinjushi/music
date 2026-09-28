@@ -11,6 +11,7 @@ import type {
   AudioCacheTrackReference,
   AudioCacheTrackState,
   Env,
+  R2BucketLike,
 } from "../types/hono";
 import {
   getPlaylistDetailPreferAnonymous,
@@ -84,6 +85,8 @@ interface PlaylistSyncState {
     string,
     { objectKey: string; br: number; submittedAt: number }
   >;
+  /** song id -> already copied into R2 */
+  r2?: Record<string, 1>;
 }
 
 interface QiniuAudioCacheJob extends AudioCacheJobStatus {
@@ -598,6 +601,60 @@ async function probeObject(
   return { contentType, ...(byteSize === undefined ? {} : { byteSize }) };
 }
 
+const R2_MIN_OBJECT_BYTES = 64 * 1024;
+const R2_MAX_OBJECT_BYTES = 80 * 1024 * 1024;
+
+/**
+ * Download `sourceUrl` and stream it into R2 under `key`. R2 has free egress,
+ * so playback costs nothing no matter where the Worker runs.
+ */
+async function storeInR2(
+  r2: R2BucketLike,
+  sourceUrl: string,
+  key: string
+): Promise<{ contentType: string; byteSize: number } | null> {
+  const response = await fetch(sourceUrl).catch(() => null);
+  if (!response) return null;
+  const size = response.status === 200 ? responseByteSize(response) : undefined;
+  if (
+    !response.body ||
+    size === undefined ||
+    size < R2_MIN_OBJECT_BYTES ||
+    size > R2_MAX_OBJECT_BYTES
+  ) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  const contentType = normalizeContentType(
+    response.headers.get("Content-Type")
+  );
+  const FixedLength = (
+    globalThis as {
+      FixedLengthStream?: new (length: number) => TransformStream;
+    }
+  ).FixedLengthStream;
+  const body = FixedLength
+    ? response.body.pipeThrough(new FixedLength(size))
+    : response.body;
+  const stored = await r2
+    .put(key, body, { httpMetadata: { contentType } })
+    .catch(() => null);
+  return stored ? { contentType, byteSize: size } : null;
+}
+
+function parseR2Range(
+  range: string | null | undefined
+): { offset: number; length?: number } | { suffix: number } | undefined {
+  if (!range) return undefined;
+  const match = /^bytes=(\d{1,15})-(\d{0,15})$|^bytes=-(\d{1,15})$/.exec(range);
+  if (!match) return undefined;
+  if (match[3] !== undefined) return { suffix: Number(match[3]) };
+  const offset = Number(match[1]);
+  return match[2] === ""
+    ? { offset }
+    : { offset, length: Number(match[2]) - offset + 1 };
+}
+
 /** Submit an asynchronous Qiniu fetch without waiting for it to finish. */
 async function submitQiniuFetch(
   config: QiniuAudioCacheConfig,
@@ -710,14 +767,17 @@ export function createQiniuAudioCache(
   waitUntil: (promise: Promise<unknown>) => void
 ): AudioCacheLike | null {
   const config = normalizeConfig(env);
-  return config ? new QiniuAudioCache(env, config, waitUntil) : null;
+  return config
+    ? new QiniuAudioCache(env, config, waitUntil, env.AUDIO_R2)
+    : null;
 }
 
 class QiniuAudioCache implements AudioCacheLike {
   constructor(
     private readonly env: Env,
     private readonly config: QiniuAudioCacheConfig,
-    private readonly waitUntil: (promise: Promise<unknown>) => void
+    private readonly waitUntil: (promise: Promise<unknown>) => void,
+    private readonly r2?: R2BucketLike
   ) {}
 
   async lookup(
@@ -739,6 +799,11 @@ class QiniuAudioCache implements AudioCacheLike {
     if (!/^[a-f0-9]{64}$/.test(cacheKey) || !isValidRange(range)) return null;
     const record = await this.readRecord(cacheKey);
     if (!record || record.state !== "ready") return null;
+
+    if (this.r2) {
+      const fromR2 = await this.serveFromR2(cacheKey, record, range);
+      if (fromR2) return fromR2;
+    }
 
     const url = await privateDownloadUrl(this.config, record.objectKey);
     const response = await fetch(url, {
@@ -1035,6 +1100,25 @@ class QiniuAudioCache implements AudioCacheLike {
           return;
         }
 
+        if (this.r2) {
+          const ready = await storeInR2(this.r2, source.url, objectKeyValue);
+          if (ready) {
+            await this.writeReadyRecord(
+              hash,
+              targetKey,
+              objectKeyValue,
+              source.br,
+              ready
+            );
+            state.ready[track.id] = source.br;
+            (state.r2 ??= {})[track.id] = 1;
+            result.ready += 1;
+          } else {
+            result.remaining += 1;
+          }
+          return;
+        }
+
         if (await submitQiniuFetch(this.config, source.url, objectKeyValue)) {
           state.pending[track.id] = {
             objectKey: objectKeyValue,
@@ -1047,6 +1131,30 @@ class QiniuAudioCache implements AudioCacheLike {
           result.remaining += 1;
         }
       });
+    }
+
+    // Copy songs cached in Qiniu over to R2 (one Qiniu download each, once).
+    let migrating = 0;
+    if (this.r2) {
+      const r2 = this.r2;
+      const copied = (state.r2 ??= {});
+      for (const track of tracks) {
+        if (!state.ready[track.id] || copied[track.id]) continue;
+        migrating += 1;
+        if (!spend(3)) continue;
+        submitQueue.push(async () => {
+          const hash = await hashTargetKey(
+            canonicalTargetKey({ source: "_netease", id: track.id })
+          );
+          const key = objectKey(this.config, hash);
+          if (!(await r2.head(key).catch(() => null))) {
+            const url = await privateDownloadUrl(this.config, key, 600);
+            if (!(await storeInR2(r2, url, key))) return;
+          }
+          copied[track.id] = 1;
+          migrating -= 1;
+        });
+      }
     }
 
     // Resolve sources and submit downloads in parallel: NetEase URL lookups
@@ -1069,6 +1177,7 @@ class QiniuAudioCache implements AudioCacheLike {
       })
     );
 
+    if (this.r2) result.migrating = migrating;
     await this.env.oh_file_url.put(stateKey, JSON.stringify(state));
     await this.env.oh_file_url.put(
       PLAYLIST_STATUS_KEY_PREFIX + normalizedPlaylistId,
@@ -1307,8 +1416,7 @@ class QiniuAudioCache implements AudioCacheLike {
             : await genericUrl(candidate.source, candidate.urlId, br);
         if (!sourceUrl) continue;
         try {
-          await startQiniuFetch(this.config, sourceUrl, objectKeyValue);
-          const ready = await waitForObject(this.config, objectKeyValue);
+          const ready = await this.storeObject(sourceUrl, objectKeyValue);
           if (!ready) continue;
           await this.writeReadyRecord(
             hash,
@@ -1351,8 +1459,7 @@ class QiniuAudioCache implements AudioCacheLike {
           );
           if (!sourceUrl) continue;
           try {
-            await startQiniuFetch(this.config, sourceUrl, objectKeyValue);
-            const ready = await waitForObject(this.config, objectKeyValue);
+            const ready = await this.storeObject(sourceUrl, objectKeyValue);
             if (!ready) continue;
             await this.writeReadyRecord(
               hash,
@@ -1369,6 +1476,60 @@ class QiniuAudioCache implements AudioCacheLike {
       }
     }
     return "failed";
+  }
+
+  private async storeObject(
+    sourceUrl: string,
+    objectKeyValue: string
+  ): Promise<{ contentType: string; byteSize?: number } | null> {
+    if (this.r2) return storeInR2(this.r2, sourceUrl, objectKeyValue);
+    await startQiniuFetch(this.config, sourceUrl, objectKeyValue);
+    return waitForObject(this.config, objectKeyValue);
+  }
+
+  private async serveFromR2(
+    cacheKey: string,
+    record: QiniuCacheRecord,
+    range: string | null | undefined
+  ): Promise<Response | null> {
+    const object = await this.r2!.get(record.objectKey, {
+      range: parseR2Range(range),
+    }).catch(() => null);
+    if (!object?.body) return null;
+
+    const headers = new Headers();
+    headers.set(
+      "Content-Type",
+      normalizeContentType(
+        object.httpMetadata?.contentType ?? record.contentType
+      )
+    );
+    let status = 200;
+    let length = object.size;
+    if (range && object.range) {
+      const r = object.range;
+      const start =
+        r.suffix !== undefined
+          ? Math.max(0, object.size - r.suffix)
+          : (r.offset ?? 0);
+      length = Math.min(
+        r.suffix !== undefined ? r.suffix : (r.length ?? object.size - start),
+        object.size - start
+      );
+      status = 206;
+      headers.set(
+        "Content-Range",
+        `bytes ${start}-${start + length - 1}/${object.size}`
+      );
+    }
+    headers.set("Content-Length", String(length));
+    headers.set("Accept-Ranges", "bytes");
+    headers.set("Cache-Control", "private, max-age=86400");
+    headers.set("Pragma", "no-cache");
+    headers.set("Vary", "Range");
+    headers.set("ETag", `"${cacheKey}"`);
+    headers.set("X-Content-Type-Options", "nosniff");
+    return new Response(object.body, { status, headers });
   }
 
   private async writeReadyRecord(
