@@ -740,9 +740,7 @@ describe("NetEase session routes", () => {
 
     const unavailableEnv = {
       ...createEnv(),
-      oh_file_url: {
-        get: vi.fn().mockRejectedValue(new Error("KV unavailable")),
-      },
+      oh_file_url: undefined,
     } as unknown as Env;
     api.getPlaylistDetail.mockClear();
     const unavailable = await neteaseRoutes.request(
