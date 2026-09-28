@@ -1,4 +1,5 @@
 import { musicApi } from "@/lib/music-api";
+import { getOfflineAudioUrl } from "@/lib/offline-audio";
 import { normalizeAudioUrlForPlayback } from "@/lib/utils/audio-url";
 import { useUrlCacheStore, buildUrlCacheKey } from "@/store/url-cache-store";
 import type { MusicTrack } from "@/types/music";
@@ -68,7 +69,7 @@ async function resolveRemoteAudioUrl(
 
 /**
  * 解析曲目的最佳播放 URL
- * 优先级：内存 URL → 远端请求
+ * 优先级：本地离线文件 → 内存 URL → 远端请求
  *
  * 供 useAudioTrackLoader（主播放）和 useAudioPreloader（预加载）共享使用
  */
@@ -81,13 +82,20 @@ export async function resolveTrackUrl(
   const { id: trackId, source, url_id: urlId } = track;
   const trackKey = buildUrlCacheKey(source, trackId, urlId, String(quality));
 
-  // 内存缓存
+  // Capture the generation before any await so a concurrent clear wins.
   const cacheStore = useUrlCacheStore.getState();
-  const memCached = cacheStore.get(trackKey);
+  const cacheWriteGeneration = cacheStore.generation;
+
+  // 手机本地离线副本（最快，且无需联网）
+  const offlineUrl = await getOfflineAudioUrl(track);
+  throwIfAborted(signal);
+  if (offlineUrl) return { url: offlineUrl };
+
+  // 内存缓存
+  const memCached = useUrlCacheStore.getState().get(trackKey);
   if (memCached) {
     return { url: normalizeAudioUrlForPlayback(memCached) };
   }
-  const cacheWriteGeneration = cacheStore.generation;
 
   // 离线无资源
   if (!navigator.onLine) return { url: "" };

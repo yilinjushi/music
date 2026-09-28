@@ -54,10 +54,16 @@ import {
   normalizeNeteaseDetailCover,
 } from "@/lib/netease/netease-detail-import";
 import {
+  getOfflineTrackIds,
   getPlaylistCacheStatus,
   requestNeteasePlaylistSync,
   type PlaylistCacheStatus,
 } from "@/lib/audio-cache";
+import {
+  getOfflineUsage,
+  syncOfflineAudio,
+  type OfflineSyncProgress,
+} from "@/lib/offline-audio";
 
 const LOAD_MORE_RETRY_DELAYS_MS = [1_500, 4_000];
 
@@ -243,6 +249,37 @@ export function NeteaseDetail({
       window.clearInterval(timer);
     };
   }, [id, type, authenticated]);
+
+  // Home (红心) only: after the app has settled, ask the server to pick up
+  // newly liked songs, then mirror every cached song onto the phone.
+  const [offline, setOffline] = useState<OfflineSyncProgress | null>(null);
+  const [offlineBytes, setOfflineBytes] = useState<number | null>(null);
+  useEffect(() => {
+    if (!compact || !id || type !== "playlist" || !authenticated) return;
+    let cancelled = false;
+    const timers: number[] = [];
+    const run = async (round: number) => {
+      if (cancelled) return;
+      requestNeteasePlaylistSync(id);
+      const ids = await getOfflineTrackIds(id);
+      if (cancelled || !ids) return;
+      await syncOfflineAudio(ids, (progress) => {
+        if (!cancelled) setOffline(progress);
+      });
+      const usage = await getOfflineUsage();
+      if (!cancelled && usage) setOfflineBytes(usage.usedBytes);
+      // New likes need a server round first; look again a few times.
+      if (round < 3) {
+        timers.push(window.setTimeout(() => void run(round + 1), 90_000));
+      }
+    };
+    // Let the last song resume and the list render before any downloads.
+    timers.push(window.setTimeout(() => void run(0), 4_000));
+    return () => {
+      cancelled = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [compact, id, type, authenticated]);
 
   const onHeaderBack = () => {
     handleBack(onBack);
@@ -588,9 +625,17 @@ export function NeteaseDetail({
             {cached}/{total}
           </span>
           <span className="text-xs text-muted-foreground">
-            {cached >= total - (cacheStatus?.unavailable.length ?? 0)
-              ? `已全部缓存 · 无音源隐藏 ${cacheStatus?.unavailable.length ?? 0} 首`
-              : `已缓存 ${cached} 首 · 共 ${total} 首`}
+            {offline
+              ? `本机 ${offline.stored}/${offline.total}${
+                  offline.running ? " 下载中" : ""
+                }${
+                  offlineBytes
+                    ? ` · ${(offlineBytes / 1024 ** 3).toFixed(1)} GB`
+                    : ""
+                } · 无音源 ${cacheStatus?.unavailable.length ?? 0}`
+              : cached >= total - (cacheStatus?.unavailable.length ?? 0)
+                ? `已全部缓存 · 无音源隐藏 ${cacheStatus?.unavailable.length ?? 0} 首`
+                : `已缓存 ${cached} 首 · 共 ${total} 首`}
           </span>
         </div>
       </div>

@@ -1215,6 +1215,27 @@ class QiniuAudioCache implements AudioCacheLike {
       : null;
   }
 
+  async getReadyTrackIds(playlistId: string): Promise<string[] | null> {
+    if (!isSafePlaylistId(playlistId)) return null;
+    const id = normalizeId(playlistId);
+    const [saved, state] = (await Promise.all([
+      this.env.oh_file_url.get(PLAYLIST_TRACKS_KEY_PREFIX + id, {
+        type: "json",
+      }),
+      this.env.oh_file_url.get(PLAYLIST_STATE_KEY_PREFIX + id, {
+        type: "json",
+      }),
+    ])) as [
+      { tracks?: QiniuPlaylistTrack[] } | null,
+      Partial<PlaylistSyncState> | null,
+    ];
+    if (!Array.isArray(saved?.tracks) || !state?.ready) return null;
+    const ready = state.ready;
+    return saved.tracks
+      .map((track) => track.id)
+      .filter((trackId) => typeof trackId === "string" && ready[trackId]);
+  }
+
   async getJob(jobId: string): Promise<AudioCacheJobStatus | null> {
     if (!/^[a-f0-9]{32}$/.test(jobId)) return null;
     const value = await this.env.oh_file_url.get(jobKey(jobId), {

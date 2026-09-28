@@ -616,6 +616,27 @@ musicRoutes.get("/cache/playlist-status", async (c) => {
   }
 });
 
+/** Song ids the owner's phone should keep offline for this playlist. */
+musicRoutes.get("/cache/playlist-offline", async (c) => {
+  c.header("Cache-Control", "private, no-store, max-age=0");
+  const cache = resolveAudioCache(c);
+  if (!cache?.getReadyTrackIds) {
+    return c.json({ error: "Audio cache unavailable" }, 404);
+  }
+  const playlistId = new URL(c.req.url).searchParams.get("playlistId") || "";
+  if (!AUDIO_CACHE_PLAYLIST_ID_PATTERN.test(playlistId)) {
+    return c.json({ error: "Invalid playlist ID" }, 400);
+  }
+  try {
+    const session = await readNeteaseSession(c.env, c.req.header("Cookie"));
+    if (!session) return c.json({ error: "Unauthorized" }, 401);
+    const ids = await cache.getReadyTrackIds(playlistId);
+    return ids ? c.json({ ids }) : c.json({ error: "No status yet" }, 404);
+  } catch {
+    return c.json({ error: "Audio cache unavailable" }, 503);
+  }
+});
+
 musicRoutes.get("/cache/jobs/:jobId", async (c) => {
   const cache = resolveAudioCache(c);
   if (!cache) return c.json({ error: "Audio cache unavailable" }, 404);

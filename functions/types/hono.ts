@@ -104,6 +104,8 @@ export interface AudioCacheLike {
     playlistId: string
   ): Promise<(AudioCacheSyncResult & { updatedAt: number }) | null>;
   getJob(jobId: string): Promise<AudioCacheJobStatus | null>;
+  /** Cached song ids of a playlist, in playlist order (newest likes first). */
+  getReadyTrackIds?(playlistId: string): Promise<string[] | null>;
 }
 
 export type Env = {

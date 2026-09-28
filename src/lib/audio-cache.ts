@@ -198,6 +198,30 @@ export async function getUnavailableTrackIds(
   }
 }
 
+/** Cached song ids of the playlist, newest likes first (null if unknown). */
+export async function getOfflineTrackIds(
+  playlistId: string
+): Promise<string[] | null> {
+  try {
+    const response = await fetchWithTimeout(
+      `${CACHE_PREFIX}/playlist-offline?playlistId=${encodeURIComponent(playlistId)}`,
+      { credentials: "include", cache: "no-store" },
+      8_000
+    );
+    if (!response.ok) return null;
+    const payload = (await response.json().catch(() => null)) as {
+      ids?: unknown;
+    } | null;
+    return Array.isArray(payload?.ids)
+      ? payload.ids.filter(
+          (id): id is string => typeof id === "string" && /^\d{1,20}$/.test(id)
+        )
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export interface PlaylistCacheStatus {
   total: number;
   ready: number;
