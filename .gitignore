@@ -28,5 +28,6 @@ tsconfig.tsbuildinfo
 
 # AI
 .trae/
-.claude/
+.claude/*
+!.claude/settings.json
 openspec/

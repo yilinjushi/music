@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Bash(git push origin --delete:*)",
+      "Edit",
+      "Write",
+      "WebFetch",
+      "WebSearch",
+      "mcp__github",
+      "mcp__Github",
+      "mcp__Cloudflare_Developer_Platform",
+      "mcp__Claude_Code_Remote"
+    ],
+    "deny": ["Bash(git push --force*)", "Bash(git push -f*)", "Bash(rm -rf /*)"]
+  }
+}
