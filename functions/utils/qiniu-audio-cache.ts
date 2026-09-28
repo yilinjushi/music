@@ -848,6 +848,7 @@ class QiniuAudioCache implements AudioCacheLike {
     headers.set("Vary", "Range");
     headers.set("ETag", `"${cacheKey}"`);
     headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("X-Audio-Store", "qiniu");
     return new Response(response.body, { status: response.status, headers });
   }
 
@@ -1543,6 +1544,7 @@ class QiniuAudioCache implements AudioCacheLike {
     headers.set("Vary", "Range");
     headers.set("ETag", `"${cacheKey}"`);
     headers.set("X-Content-Type-Options", "nosniff");
+    headers.set("X-Audio-Store", "r2");
     return new Response(object.body, { status, headers });
   }
 
