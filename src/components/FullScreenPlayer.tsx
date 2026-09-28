@@ -276,7 +276,7 @@ export function FullScreenPlayer({
         <Button
           variant="ghost"
           size="sm"
-          className="text-lg tracking-widest text-white/60 hover:text-white hover:bg-white/10 h-12 px-4"
+          className="text-xs tracking-widest text-white/60 hover:text-white hover:bg-white/10 h-12 px-4"
           onClick={() => setQualityDrawerOpen(true)}
           aria-label={`选择播放音质，当前 ${getQualityShortLabel(quality)}`}
         >
