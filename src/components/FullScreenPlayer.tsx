@@ -50,9 +50,9 @@ interface ModeIconProps {
 }
 
 function ModeIcon({ isRepeat, isShuffle }: ModeIconProps) {
-  if (isRepeat) return <Repeat1 className="h-5 w-5" />;
-  if (isShuffle) return <Shuffle className="h-5 w-5" />;
-  return <Repeat className="h-5 w-5" />;
+  if (isRepeat) return <Repeat1 className="h-7 w-7" />;
+  if (isShuffle) return <Shuffle className="h-7 w-7" />;
+  return <Repeat className="h-7 w-7" />;
 }
 
 const BackgroundLayer = memo(
@@ -265,18 +265,18 @@ export function FullScreenPlayer({
         <Button
           variant="ghost"
           size="icon"
-          className="h-12 w-12 text-white/60 hover:bg-white/10 hover:text-white"
+          className="h-16 w-16 text-white/60 hover:bg-white/10 hover:text-white"
           onClick={() => {
             onClose();
           }}
           aria-label="收起全屏播放器"
         >
-          <ChevronDown className="h-6 w-6" />
+          <ChevronDown className="h-8 w-8" />
         </Button>
         <Button
           variant="ghost"
           size="sm"
-          className="text-xs tracking-widest text-white/50 hover:text-white hover:bg-white/10 h-8 px-3"
+          className="text-lg tracking-widest text-white/60 hover:text-white hover:bg-white/10 h-12 px-4"
           onClick={() => setQualityDrawerOpen(true)}
           aria-label={`选择播放音质，当前 ${getQualityShortLabel(quality)}`}
         >
@@ -285,11 +285,11 @@ export function FullScreenPlayer({
         <Button
           variant="ghost"
           size="icon"
-          className="h-12 w-12 text-white/60 hover:bg-white/10 hover:text-white"
+          className="h-16 w-16 text-white/60 hover:bg-white/10 hover:text-white"
           onClick={handleShare}
           aria-label="分享当前歌曲"
         >
-          <SquareArrowOutUpRight className="h-5 w-5" />
+          <SquareArrowOutUpRight className="h-7 w-7" />
         </Button>
       </header>
 
@@ -361,7 +361,7 @@ export function FullScreenPlayer({
             <Button
               variant="ghost"
               size="icon"
-              className="h-10 w-10 text-white/70 hover:bg-white/10 hover:text-white"
+              className="h-14 w-14 text-white/70 hover:bg-white/10 hover:text-white"
               onClick={(e) => {
                 e.stopPropagation();
                 handleToggleLike();
@@ -372,7 +372,7 @@ export function FullScreenPlayer({
             >
               <Heart
                 className={cn(
-                  "h-6 w-6 transition-all",
+                  "h-8 w-8 transition-all",
                   isCurrentTrackFavorite && "fill-primary text-primary"
                 )}
               />
@@ -393,7 +393,7 @@ export function FullScreenPlayer({
                   onToggleLike={() => {
                     handleToggleLike();
                   }}
-                  triggerClassName="h-10 w-10 text-white/70 hover:bg-white/10 hover:text-white"
+                  triggerClassName="h-14 w-14 text-white/70 hover:bg-white/10 hover:text-white [&_svg]:h-8 [&_svg]:w-8"
                   onNavigate={() => {
                     onClose();
                   }}
@@ -433,11 +433,11 @@ export function FullScreenPlayer({
         />
       </div>
 
-      <div className="shrink-0 flex items-center justify-between px-8 py-6 pb-[calc(2rem+var(--safe-area-bottom))] relative z-10">
+      <div className="shrink-0 flex items-center justify-between px-4 py-6 pb-[calc(2rem+var(--safe-area-bottom))] relative z-10">
         <Button
           variant="ghost"
           size="icon"
-          className="h-12 w-12 transition-colors text-white/70 hover:text-white hover:bg-white/10"
+          className="h-16 w-16 transition-colors text-white/70 hover:text-white hover:bg-white/10"
           onClick={handleModeToggle}
           aria-label={
             isRepeat
@@ -452,35 +452,35 @@ export function FullScreenPlayer({
         <Button
           variant="ghost"
           size="icon"
-          className="h-12 w-12 text-white/70 hover:bg-white/10 hover:text-white"
+          className="h-16 w-16 text-white/70 hover:bg-white/10 hover:text-white"
           onClick={handlePrev}
           aria-label="上一首"
         >
-          <SkipBack className="h-6 w-6 fill-current" />
+          <SkipBack className="h-9 w-9 fill-current" />
         </Button>
         <Button
           size="icon"
-          className="h-16 w-16 rounded-full bg-white text-black shadow-lg hover:scale-105 transition-all active:scale-95"
+          className="h-20 w-20 rounded-full bg-white text-black shadow-lg hover:scale-105 transition-all active:scale-95"
           onClick={togglePlay}
           disabled={isLoading}
           aria-label={isLoading ? "正在加载" : isPlaying ? "暂停" : "播放"}
         >
           {isLoading ? (
-            <Spinner className="h-7 w-7 text-black" />
+            <Spinner className="h-10 w-10 text-black" />
           ) : isPlaying ? (
-            <Pause className="h-7 w-7 fill-current" />
+            <Pause className="h-10 w-10 fill-current" />
           ) : (
-            <Play className="h-7 w-7 fill-current ml-1" />
+            <Play className="h-10 w-10 fill-current ml-1" />
           )}
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-12 w-12 text-white/70 hover:bg-white/10 hover:text-white"
+          className="h-16 w-16 text-white/70 hover:bg-white/10 hover:text-white"
           onClick={handleNext}
           aria-label="下一首"
         >
-          <SkipForward className="h-6 w-6 fill-current" />
+          <SkipForward className="h-9 w-9 fill-current" />
         </Button>
         <PlayerQueueDrawer
           queue={queue}
@@ -496,10 +496,10 @@ export function FullScreenPlayer({
             <Button
               variant="ghost"
               size="icon"
-              className="h-12 w-12 text-white/70 hover:bg-white/10 hover:text-white"
+              className="h-16 w-16 text-white/70 hover:bg-white/10 hover:text-white"
               aria-label="播放列表"
             >
-              <ListVideo className="h-5 w-5" />
+              <ListVideo className="h-7 w-7" />
             </Button>
           }
         />
