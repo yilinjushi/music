@@ -97,15 +97,8 @@ const BackgroundLayer = memo(
             showCoverMask ? "opacity-100" : "opacity-0"
           )}
         >
-          {coverUrl && (
-            <img
-              src={coverUrl}
-              alt=""
-              aria-hidden="true"
-              className="absolute inset-[-32px] h-[calc(100%+64px)] w-[calc(100%+64px)] object-cover blur-3xl scale-110"
-            />
-          )}
-          <div className="absolute inset-0 bg-black/70" />
+          {/* Solid layer instead of a blurred cover: blur-3xl kept the GPU busy. */}
+          <div className="absolute inset-0 bg-black/90" />
         </div>
 
         {/* 兜底背景层 */}

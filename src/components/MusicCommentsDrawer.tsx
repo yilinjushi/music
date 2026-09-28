@@ -61,7 +61,7 @@ export function MusicCommentsDrawer({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="h-[85vh] flex flex-col p-0 gap-0 rounded-t-3xl border-none bg-background backdrop-blur-xl outline-none">
+      <DrawerContent className="h-[85vh] flex flex-col p-0 gap-0 rounded-t-3xl border-none bg-background outline-none">
         <DrawerHeader className="px-6 py-5 pb-2 border-none text-left">
           <DrawerTitle className="text-lg font-semibold tracking-tight">
             {track?.name ? `${track.name} · 评论` : "评论"}

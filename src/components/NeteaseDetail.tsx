@@ -225,12 +225,19 @@ export function NeteaseDetail({
     setCacheStatus(null);
     if (!id || type !== "playlist" || !authenticated) return;
     let cancelled = false;
+    let timer = 0;
     const poll = async () => {
+      if (document.hidden) return;
       const next = await getPlaylistCacheStatus(id);
-      if (!cancelled && next) setCacheStatus(next);
+      if (cancelled || !next) return;
+      setCacheStatus(next);
+      // Nothing left to cache: stop asking every 15s.
+      if (next.ready + next.unavailable.length >= next.total) {
+        window.clearInterval(timer);
+      }
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), 15_000);
+    timer = window.setInterval(() => void poll(), 15_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

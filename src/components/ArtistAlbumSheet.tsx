@@ -183,7 +183,7 @@ export function ArtistAlbumSheet({
 
   return (
     <Drawer open={isOpen} onOpenChange={onOpenChange}>
-      <DrawerContent className="border-none rounded-t-[28px] bg-background backdrop-blur-xl max-h-[85vh]">
+      <DrawerContent className="border-none rounded-t-[28px] bg-background max-h-[85vh]">
         <DrawerHeader className="px-6 pt-6 pb-2 text-left flex justify-between">
           <DrawerTitle className="text-xl font-semibold tracking-tight">
             {artistName}

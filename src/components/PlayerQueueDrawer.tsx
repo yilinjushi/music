@@ -90,10 +90,10 @@ function QueueTrackItem({
 
           {/* 极致小巧的顺序波动动画 */}
           {isCurrent && isPlaying && (
-            <div className="absolute inset-0 flex items-center justify-center gap-[3px] rounded-lg bg-black/30 backdrop-blur-[2px]">
-              <div className="h-1 w-[2.5px] rounded-full bg-primary animate-[audio-bar_1s_ease-in-out_infinite]" />
-              <div className="h-1 w-[2.5px] rounded-full bg-primary animate-[audio-bar_1s_ease-in-out_infinite] [animation-delay:200ms]" />
-              <div className="h-1 w-[2.5px] rounded-full bg-primary animate-[audio-bar_1s_ease-in-out_infinite] [animation-delay:400ms]" />
+            <div className="absolute inset-0 flex items-center justify-center gap-[3px] rounded-lg bg-black/40">
+              <div className="h-2 w-[2.5px] rounded-full bg-primary" />
+              <div className="h-3 w-[2.5px] rounded-full bg-primary" />
+              <div className="h-1.5 w-[2.5px] rounded-full bg-primary" />
             </div>
           )}
         </div>

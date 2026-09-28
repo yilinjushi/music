@@ -314,7 +314,7 @@ export function MusicTrackList({
   }
 
   const renderHeader = () => (
-    <div className="sticky top-0 z-20 border-b bg-background backdrop-blur">
+    <div className="sticky top-0 z-20 border-b bg-background">
       <div
         className={cn(
           "grid items-center gap-4 px-4 text-muted-foreground",
