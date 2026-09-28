@@ -974,6 +974,7 @@ class QiniuAudioCache implements AudioCacheLike {
         saved?.pending && typeof saved.pending === "object"
           ? saved.pending
           : {},
+      r2: saved?.r2 && typeof saved.r2 === "object" ? saved.r2 : {},
     };
     let legacyChecksLeft = SYNC_LEGACY_RECORD_CHECKS;
     const submitQueue: Array<() => Promise<void>> = [];

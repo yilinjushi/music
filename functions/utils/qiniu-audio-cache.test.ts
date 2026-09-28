@@ -391,6 +391,10 @@ describe("Qiniu audio cache adapter", () => {
       expect(r2.head).toHaveBeenCalledTimes(1);
       expect(r2.put).toHaveBeenCalledTimes(2);
       expect(JSON.parse(store.get(stateKey)!).r2).toEqual({ "123": 1 });
+
+      // The copy is remembered: the next run does not check R2 again.
+      await cache.syncNeteasePlaylist("neplaylist_1", "MUSIC_U=x");
+      expect(r2.head).toHaveBeenCalledTimes(1);
     });
 
     it("never caches a NetEase trial clip and reports songs with no source", async () => {
