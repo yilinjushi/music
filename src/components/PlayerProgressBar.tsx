@@ -199,7 +199,7 @@ export function PlayerProgressBar({
           </div>
         </div>
       </div>
-      <div className="relative flex justify-between text-xs text-white/60 font-medium mt-1.5 px-0.5 tracking-wider">
+      <div className="relative flex justify-between text-base text-white/70 font-medium mt-1.5 px-0.5 tracking-wider">
         <span
           className={cn(
             "flex min-h-11 min-w-11 items-center gap-0.5",

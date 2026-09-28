@@ -50,9 +50,9 @@ interface ModeIconProps {
 }
 
 function ModeIcon({ isRepeat, isShuffle }: ModeIconProps) {
-  if (isRepeat) return <Repeat1 className="h-7 w-7" />;
-  if (isShuffle) return <Shuffle className="h-7 w-7" />;
-  return <Repeat className="h-7 w-7" />;
+  if (isRepeat) return <Repeat1 className="size-7" />;
+  if (isShuffle) return <Shuffle className="size-7" />;
+  return <Repeat className="size-7" />;
 }
 
 const BackgroundLayer = memo(
@@ -271,7 +271,7 @@ export function FullScreenPlayer({
           }}
           aria-label="收起全屏播放器"
         >
-          <ChevronDown className="h-8 w-8" />
+          <ChevronDown className="size-8" />
         </Button>
         <Button
           variant="ghost"
@@ -289,7 +289,7 @@ export function FullScreenPlayer({
           onClick={handleShare}
           aria-label="分享当前歌曲"
         >
-          <SquareArrowOutUpRight className="h-7 w-7" />
+          <SquareArrowOutUpRight className="size-7" />
         </Button>
       </header>
 
@@ -372,7 +372,7 @@ export function FullScreenPlayer({
             >
               <Heart
                 className={cn(
-                  "h-8 w-8 transition-all",
+                  "size-8 transition-all",
                   isCurrentTrackFavorite && "fill-primary text-primary"
                 )}
               />
@@ -393,7 +393,7 @@ export function FullScreenPlayer({
                   onToggleLike={() => {
                     handleToggleLike();
                   }}
-                  triggerClassName="h-14 w-14 text-white/70 hover:bg-white/10 hover:text-white [&_svg]:h-8 [&_svg]:w-8"
+                  triggerClassName="h-14 w-14 text-white/70 hover:bg-white/10 hover:text-white [&_svg]:size-8!"
                   onNavigate={() => {
                     onClose();
                   }}
@@ -456,7 +456,7 @@ export function FullScreenPlayer({
           onClick={handlePrev}
           aria-label="上一首"
         >
-          <SkipBack className="h-9 w-9 fill-current" />
+          <SkipBack className="size-9 fill-current" />
         </Button>
         <Button
           size="icon"
@@ -466,11 +466,11 @@ export function FullScreenPlayer({
           aria-label={isLoading ? "正在加载" : isPlaying ? "暂停" : "播放"}
         >
           {isLoading ? (
-            <Spinner className="h-10 w-10 text-black" />
+            <Spinner className="size-10 text-black" />
           ) : isPlaying ? (
-            <Pause className="h-10 w-10 fill-current" />
+            <Pause className="size-10 fill-current" />
           ) : (
-            <Play className="h-10 w-10 fill-current ml-1" />
+            <Play className="size-10 fill-current ml-1" />
           )}
         </Button>
         <Button
@@ -480,7 +480,7 @@ export function FullScreenPlayer({
           onClick={handleNext}
           aria-label="下一首"
         >
-          <SkipForward className="h-9 w-9 fill-current" />
+          <SkipForward className="size-9 fill-current" />
         </Button>
         <PlayerQueueDrawer
           queue={queue}
@@ -499,7 +499,7 @@ export function FullScreenPlayer({
               className="h-16 w-16 text-white/70 hover:bg-white/10 hover:text-white"
               aria-label="播放列表"
             >
-              <ListVideo className="h-7 w-7" />
+              <ListVideo className="size-7" />
             </Button>
           }
         />
