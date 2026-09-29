@@ -541,7 +541,7 @@ async function expectNoSeriousA11yViolations(page: Page) {
 }
 
 for (const corePage of [
-  { path: "/search", readyText: "搜索" },
+  { path: "/search", readyText: "输入歌名、歌手或专辑，搜索网易云音乐" },
   { path: "/mine", readyText: "本地歌单" },
   { path: "/settings", readyText: "系统设置" },
 ]) {
