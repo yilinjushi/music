@@ -11,6 +11,7 @@
 - 部署方式（走 GitHub Actions，不在本地部署）：push 到 `main` 后，`.github/workflows/ci.yml` 先跑检查，通过后用 `cloudflare/wrangler-action` 发布到 Cloudflare Pages。
   - 部署用的 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` 存在 GitHub 仓库 Secrets 里，云端会话里没有令牌，本地 `wrangler` 无法部署。
   - Pages 设置里的环境变量与密钥保持不变。
+- **生产地址（owner 2026-09-29 确认）：`https://music.80007001.xyz`**，这才是正确的生产地址；`*.pages.dev` 地址不要当作生产地址。
 - 提交前至少跑 `npm run typecheck`；部署后打开生产地址确认能正常加载。
 - 仍须遵守 `AGENTS.md` / `SECURITY.md`：不提交密钥、HAR、真实账号数据。
 
