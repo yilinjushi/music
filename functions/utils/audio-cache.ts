@@ -51,6 +51,17 @@ const NETEASE_PLAYLIST_ID_PATTERN =
 const AUDIO_MIME_ESSENCE =
   /^(?:audio\/[a-z0-9!#$&^_.+-]+|video\/mp4|application\/octet-stream)$/;
 
+interface AudioCacheRecord {
+  version: 1;
+  state: "ready";
+  targetKey: string;
+  objectKey: string;
+  storedBr: number;
+  contentType: string;
+  byteSize?: number;
+  createdAt: number;
+}
+
 interface PlaylistSyncState {
   /** song id -> stored bitrate (kbps) */
   ready: Record<string, number>;

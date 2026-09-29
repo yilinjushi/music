@@ -66,7 +66,7 @@ cronRoutes.post("/audio-cache", async (c) => {
     const done = result.ready + result.unavailable.length;
     return c.json({
       // "complete": every song is either cached or confirmed sourceless.
-      state: done >= result.total && !result.migrating ? "complete" : "ok",
+      state: done >= result.total ? "complete" : "ok",
       ...result,
       unavailable: result.unavailable.length,
     });
