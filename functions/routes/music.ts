@@ -29,7 +29,7 @@ import {
   checkFixedWindowRateLimit,
   requestClientId,
 } from "@utils/request-rate-limit";
-import { createQiniuAudioCache } from "@utils/qiniu-audio-cache";
+import { createAudioCache } from "@utils/audio-cache";
 
 export const musicRoutes = new Hono<{ Bindings: Env }>();
 
@@ -57,7 +57,7 @@ export type MusicContext = Context<{ Bindings: Env }>;
 export function resolveAudioCache(c: MusicContext) {
   return (
     c.env.AUDIO_CACHE ??
-    createQiniuAudioCache(c.env, (promise) => c.executionCtx.waitUntil(promise))
+    createAudioCache(c.env, (promise) => c.executionCtx.waitUntil(promise))
   );
 }
 

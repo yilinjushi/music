@@ -77,8 +77,6 @@ export interface AudioCacheSyncResult {
   submitted: number;
   unavailable: string[];
   remaining: number;
-  /** cached songs not yet copied from Qiniu to R2 */
-  migrating?: number;
   note?: string;
 }
 
@@ -118,12 +116,6 @@ export type Env = {
   NETEASE_SESSION_HMAC_SECRET: string;
   NETEASE_CREDENTIAL_ENC_KEY: string;
   NETEASE_SESSION_TTL_SECONDS?: string;
-  QINIU_ACCESS_KEY?: string;
-  QINIU_SECRET_KEY?: string;
-  QINIU_AUDIO_CACHE_BUCKET?: string;
-  QINIU_AUDIO_CACHE_REGION?: string;
-  QINIU_AUDIO_CACHE_DOMAIN?: string;
-  QINIU_AUDIO_CACHE_PREFIX?: string;
   PASSWORD?: string;
   GITHUB_TOKEN?: string;
   CRON_SECRET?: string;
