@@ -58,6 +58,9 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       <div className="flex-1 p-4 pb-bottom-stack overflow-y-auto">
         <SettingsSection title="常用设置">
           <AggregatedSourceSelect />
+          <p className="pt-3 text-xs leading-relaxed text-muted-foreground">
+            聚合搜索会同时查询已启用的音源。点击上方“聚合音源”可以选择要用的音源，并拖动调整先后顺序。
+          </p>
         </SettingsSection>
 
         {renderDeferredSettings && (
