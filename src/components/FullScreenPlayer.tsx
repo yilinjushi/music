@@ -460,7 +460,7 @@ export function FullScreenPlayer({
         </Button>
         <Button
           size="icon"
-          className="h-20 w-20 text-white/70 hover:bg-white/10 hover:text-white active:scale-95 transition-all"
+          className="h-20 w-20 bg-transparent text-white/70 shadow-none hover:bg-white/10 hover:text-white active:scale-95 transition-all"
           onClick={togglePlay}
           disabled={isLoading}
           aria-label={isLoading ? "正在加载" : isPlaying ? "暂停" : "播放"}
