@@ -10,11 +10,11 @@ import { purgeLegacyAlbumSheetRestoreSession } from "./lib/navigation/netease-de
 
 initializeLogger();
 
-function bootstrap() {
+async function bootstrap() {
   purgeLegacyAlbumSheetRestoreSession();
-  // Retired sync credentials are dead keys: purge them in the background so a
-  // slow storage API never delays the first paint.
-  void clearRetiredSyncArtifacts();
+  // Retired sync credentials are capabilities. Purge them before any UI can
+  // render, rather than relying on the optional delayed background chunk.
+  await clearRetiredSyncArtifacts();
 
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
