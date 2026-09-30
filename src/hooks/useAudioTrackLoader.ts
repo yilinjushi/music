@@ -36,24 +36,26 @@ function isPlayInterruptionError(error: unknown): boolean {
   );
 }
 
-/** 校验歌曲在当前网络/缓存状态下是否可播 */
-function isTrackPlayable(
+/** 校验歌曲在当前网络/缓存状态下是否可播（离线时手机里有缓存也算可播） */
+async function isTrackPlayable(
   track: { source: MusicSource; id: string } | null
-): boolean {
+): Promise<boolean> {
   if (!track) return false;
   if (track.source === "local" || navigator.onLine) return true;
-  return false;
+  const { hasOfflineAudio } = await import("@/lib/offline-audio");
+  return hasOfflineAudio(track);
 }
 
 /** 查找队列中下一首可播歌曲 */
-function findNextPlayableTrack(
+async function findNextPlayableTrack(
   queue: { source: MusicSource; id: string }[],
   startIndex: number
-): number | null {
+): Promise<number | null> {
   if (!queue.length) return null;
-  for (let i = 0; i < queue.length; i++) {
+  const scanLimit = Math.min(queue.length, 200);
+  for (let i = 0; i < scanLimit; i++) {
     const index = (startIndex + i) % queue.length;
-    if (isTrackPlayable(queue[index])) return index;
+    if (await isTrackPlayable(queue[index])) return index;
   }
   return null;
 }
@@ -284,9 +286,12 @@ export function useAudioTrackLoader(
       const resumeTime = qualityChanged
         ? audio.currentTime
         : getState().currentAudioTime;
-      const cachedPrimaryUrl = !isRecovery
-        ? useUrlCacheStore.getState().get(trackKey)
-        : undefined;
+      // Offline, a remembered network URL is useless: let the resolver pick
+      // the copy stored on the phone instead.
+      const cachedPrimaryUrl =
+        !isRecovery && navigator.onLine
+          ? useUrlCacheStore.getState().get(trackKey)
+          : undefined;
       if (!qualityChanged) audio.pause();
 
       if (isRecovery) {
@@ -355,8 +360,7 @@ export function useAudioTrackLoader(
           // to the same URL; otherwise no readiness event is guaranteed.
           audio.load();
         }
-        const shouldStartBeforeReady =
-          resumeTime === 0 && getState().isPlaying;
+        const shouldStartBeforeReady = resumeTime === 0 && getState().isPlaying;
         if (shouldStartBeforeReady) {
           audio.playbackRate = getState().playbackSpeed;
         }
@@ -427,7 +431,11 @@ export function useAudioTrackLoader(
       const resolveOptimalUrl = async () => {
         assertActive();
         // 代理备用线路容灾时，直接使用已缓存的远程 URL
-        if (remoteUrlRef.current) return { url: remoteUrlRef.current };
+        if (
+          remoteUrlRef.current &&
+          (navigator.onLine || remoteUrlRef.current.startsWith("blob:"))
+        )
+          return { url: remoteUrlRef.current };
 
         const { resolveTrackUrl } = await import("@/lib/audio-resolver");
         assertActive();
@@ -457,10 +465,11 @@ export function useAudioTrackLoader(
         // 离线无资源容灾跳过
         if (!primaryUrl && !navigator.onLine && source !== "local") {
           const state = getState();
-          const nextIdx = findNextPlayableTrack(
+          const nextIdx = await findNextPlayableTrack(
             state.queue,
-            state.currentIndex
+            state.currentIndex + 1
           );
+          assertActive();
           if (nextIdx !== null && nextIdx !== state.currentIndex) {
             state.setCurrentIndexAndPlay(nextIdx);
           } else {

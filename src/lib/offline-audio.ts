@@ -63,6 +63,20 @@ export async function getOfflineAudioUrl(
   }
 }
 
+/** Whether the song is already stored on this phone (cheap cache lookup). */
+export async function hasOfflineAudio(
+  track: Pick<MusicTrack, "id" | "source">
+): Promise<boolean> {
+  const songId = neteaseId(track);
+  if (!songId || !isOfflineCapable()) return false;
+  try {
+    const cache = await caches.open(OFFLINE_CACHE);
+    return !!(await cache.match(await audioPath(songId)));
+  } catch {
+    return false;
+  }
+}
+
 export interface OfflineSyncProgress {
   /** songs that should be on the phone */
   total: number;
