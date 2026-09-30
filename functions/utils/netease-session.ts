@@ -1,5 +1,6 @@
 import type { UserProfile } from "./music/netease-types";
 import type { Env } from "../types/hono";
+import { isOwnerUserId } from "./owner";
 
 export const NETEASE_SESSION_COOKIE = "__Host-otter_netease_session";
 
@@ -274,6 +275,12 @@ export async function readNeteaseSessionById(
   if (!record || record.version !== 1) return null;
   const stored = record as StoredNeteaseSession;
   if (stored.expiresAt <= now) {
+    await env.SESSION_KV.delete(sessionKey(id));
+    return null;
+  }
+
+  // Sessions of any other account (created before the owner lock) die here.
+  if (!(await isOwnerUserId(env, stored.profile?.userId))) {
     await env.SESSION_KV.delete(sessionKey(id));
     return null;
   }

@@ -24,6 +24,7 @@
   ],
   "vars": {
     "APP_ORIGIN": "https://music.80007001.xyz",
+    "OWNER_NETEASE_UID_SHA256": "5bcd8160b57f9aa775ee75bdd72cec4211b470daa5f93f7b8df50087b2c6daf0",
     "NETEASE_SESSION_TTL_SECONDS": "34560000",
   },
 }

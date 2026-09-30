@@ -115,6 +115,8 @@ export type Env = {
   AUDIO_R2?: R2BucketLike;
   NETEASE_SESSION_HMAC_SECRET: string;
   NETEASE_CREDENTIAL_ENC_KEY: string;
+  /** SHA-256 of "netease-owner:<uid>"; only this NetEase account may use the app. */
+  OWNER_NETEASE_UID_SHA256?: string;
   NETEASE_SESSION_TTL_SECONDS?: string;
   PASSWORD?: string;
   GITHUB_TOKEN?: string;

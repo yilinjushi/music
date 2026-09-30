@@ -1,6 +1,7 @@
 import { Hono, type Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Env } from "../../types/hono";
+import { isOwnerUserId, OWNER_ONLY_MESSAGE } from "../../utils/owner";
 import {
   createNeteaseSession,
   deleteNeteaseSession,
@@ -537,6 +538,10 @@ neteaseRoutes.post("/login/cellphone", async (c) => {
     if (!profile)
       return privateJson(c, { error: "NetEase profile unavailable" }, 502);
 
+    if (!(await isOwnerUserId(c.env, profile.userId))) {
+      return privateJson(c, { error: OWNER_ONLY_MESSAGE }, 403);
+    }
+
     const session = await createNeteaseSession(c.env, result.cookie, profile);
     c.header(
       "Set-Cookie",
@@ -611,6 +616,9 @@ neteaseRoutes.post("/login/qr/check", async (c) => {
     const safeProfile = normalizeSessionProfile(profile);
     if (!safeProfile) {
       return privateJson(c, { error: "NetEase profile unavailable" }, 502);
+    }
+    if (!(await isOwnerUserId(c.env, safeProfile.userId))) {
+      return privateJson(c, { error: OWNER_ONLY_MESSAGE }, 403);
     }
     const session = await createNeteaseSession(c.env, credential, safeProfile);
     c.header(

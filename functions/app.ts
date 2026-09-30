@@ -1,4 +1,5 @@
 import { corsMiddleware } from "./middleware/cors";
+import { ownerGate } from "./middleware/owner-gate";
 import { proxyRoutes } from "./routes/proxy";
 import { musicRoutes } from "./routes/music";
 import { syncRoutes } from "./routes/sync";
@@ -47,6 +48,9 @@ app.use("*", async (c, next) => {
 
 app.get("/health", (c) => c.text("OK"));
 app.on("HEAD", "/health", (c) => c.body(null, 200));
+
+// Single-user lock, applied before any route is mounted.
+app.use("*", ownerGate);
 
 // Routes
 app.route("/proxy", proxyRoutes);

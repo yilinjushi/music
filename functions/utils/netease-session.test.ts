@@ -52,6 +52,8 @@ function createEnv() {
     SESSION_KV: kv,
     NETEASE_SESSION_HMAC_SECRET: "hmac-secret-32-characters-minimum-value",
     NETEASE_CREDENTIAL_ENC_KEY: "aes-secret-32-characters-minimum-value!",
+    OWNER_NETEASE_UID_SHA256:
+      "b5459f3214ec6fc5daf51c88eba7969496cf0331f58e3177e760ccd91d1742f8",
     NETEASE_SESSION_TTL_SECONDS: "7200",
   };
   return { env, kv };

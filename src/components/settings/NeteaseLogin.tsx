@@ -37,6 +37,8 @@ import {
 } from "@/lib/netease/netease-api";
 import type { UserProfile } from "@/lib/netease/netease-types";
 import toast from "react-hot-toast";
+
+const OWNER_ONLY_MESSAGE = "此应用仅限本人使用";
 import { QRCodeCanvas } from "qrcode.react";
 import { useNeteaseStore } from "@/store/netease-store";
 import { clearMarketSession } from "@/store/session/market-session";
@@ -197,6 +199,10 @@ export function NeteaseLogin({ autoOpen = false }: NeteaseLoginProps) {
             scheduleNextPoll(key, owner);
         }
       } catch (error) {
+        if (error instanceof Error && error.message === OWNER_ONLY_MESSAGE) {
+          if (isOwner(owner)) toast.error(OWNER_ONLY_MESSAGE);
+          return; // 不是本人账号：不再继续轮询
+        }
         if (
           isOwner(owner) &&
           !(error instanceof Error && error.name === "AbortError")
@@ -362,7 +368,11 @@ export function NeteaseLogin({ autoOpen = false }: NeteaseLoginProps) {
           isOwner(owner) &&
           !(error instanceof Error && error.name === "AbortError")
         ) {
-          toast.error("登录失败，请检查账号密码；遇到网易验证时可改用扫码登录");
+          toast.error(
+            error instanceof Error && error.message === OWNER_ONLY_MESSAGE
+              ? OWNER_ONLY_MESSAGE
+              : "登录失败，请检查账号密码；遇到网易验证时可改用扫码登录"
+          );
         }
       } finally {
         if (isOwner(owner)) setLoading(false);
