@@ -25,14 +25,15 @@ export function useDetailPage<T>(
     detail: T;
     tracks: MusicTrack[];
   }>,
-  deps: unknown[]
+  deps: unknown[],
+  /** Already-known data to show at once; the fetch then refreshes it silently. */
+  initial?: { detail: T; tracks: MusicTrack[] } | null
 ): UseDetailPageResult<T> {
-  const [state, setState] = useState<DetailPageState<T>>({
-    loading: true,
-    error: false,
-    detail: null,
-    tracks: [],
-  });
+  const [state, setState] = useState<DetailPageState<T>>(() =>
+    initial
+      ? { loading: false, error: false, ...initial }
+      : { loading: true, error: false, detail: null, tracks: [] }
+  );
   const [retryCount, setRetryCount] = useState(0);
   const fetchFnRef = useRef(fetchFn);
   fetchFnRef.current = fetchFn;

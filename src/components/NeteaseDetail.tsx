@@ -64,6 +64,7 @@ import {
   syncOfflineAudio,
   type OfflineSyncProgress,
 } from "@/lib/offline-audio";
+import { readHomeList, writeHomeList } from "@/lib/home-list-cache";
 
 const LOAD_MORE_RETRY_DELAYS_MS = [1_500, 4_000];
 
@@ -203,12 +204,17 @@ export function NeteaseDetail({
           rawTracks = res.songs;
         }
 
-        return {
+        const result = {
           detail: rawDetail,
           tracks: rawTracks.map((s) => convertSongToMusicTrack(s)),
         };
+        if (compact && type === "playlist") writeHomeList(id, result);
+        return result;
       },
-      [id, type, authenticated, refreshKey]
+      [id, type, authenticated, refreshKey],
+      compact && type === "playlist" && id
+        ? readHomeList<UnifiedDetail>(id)
+        : null
     );
 
   useEffect(() => {
@@ -274,7 +280,7 @@ export function NeteaseDetail({
       }
     };
     // Let the last song resume and the list render before any downloads.
-    timers.push(window.setTimeout(() => void run(0), 4_000));
+    timers.push(window.setTimeout(() => void run(0), 10_000));
     return () => {
       cancelled = true;
       timers.forEach((timer) => window.clearTimeout(timer));
@@ -662,7 +668,10 @@ export function NeteaseDetail({
       </>
     );
     return (
-      <div ref={scrollRef} className="h-full overflow-y-auto custom-scrollbar">
+      <div
+        ref={scrollRef}
+        className="h-full overflow-y-auto overscroll-y-contain custom-scrollbar"
+      >
         <div className="pb-bottom-stack">
           {trackList(headerLead, headerActions)}
         </div>

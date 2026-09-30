@@ -51,6 +51,7 @@ export function RootLayout() {
     <>
       <MusicLayout
         isTab={isTab}
+        lockScroll={location.pathname === "/"}
         player={
           <Suspense fallback={null}>
             <PlayerBarHost isTab={isTab} />

@@ -33,6 +33,7 @@ import {
 } from "./netease-normalize";
 import type { MusicTrack } from "@/types/music";
 import { clearDataCache } from "@/lib/utils/cache";
+import { clearHomeList } from "@/lib/home-list-cache";
 import { useNeteaseStore } from "@/store/netease-store";
 import { useUrlCacheStore } from "@/store/url-cache-store";
 import { clearMarketSession } from "@/store/session/market-session";
@@ -95,6 +96,7 @@ function setPendingLogout(pending: boolean): void {
 }
 
 async function clearSessionBoundClientCaches(): Promise<void> {
+  clearHomeList();
   const results = await Promise.allSettled([
     clearMarketSession(),
     useUrlCacheStore.getState().clear(),

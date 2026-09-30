@@ -17,6 +17,7 @@ import {
 const HOME_PLAYLIST_ID = "neplaylist_366135532";
 const HOME_REFRESH_AFTER_MS = 30_000;
 const HOME_SYNC_DELAY_MS = 20_000;
+const HOME_HIDE_DELAY_MS = 3_000;
 
 function HomeLoginGate() {
   return (
@@ -47,7 +48,10 @@ export function HomeRoute() {
   const isPlaying = useMusicStore((state) => state.isPlaying);
   const [sessionState, setSessionState] = useState<
     "checking" | "authenticated" | "unauthenticated"
-  >("checking");
+  >(() =>
+    // 上次登录过：先直接显示列表，后台再确认登录状态。
+    authenticated ? "authenticated" : "checking"
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -114,14 +118,17 @@ export function HomeRoute() {
       () => requestNeteasePlaylistSync(HOME_PLAYLIST_ID),
       HOME_SYNC_DELAY_MS
     );
-    void getUnavailableTrackIds(HOME_PLAYLIST_ID, controller.signal).then(
-      (ids) => {
-        if (!controller.signal.aborted) setHiddenTrackIds(new Set(ids));
-      }
-    );
+    const hideTimer = window.setTimeout(() => {
+      void getUnavailableTrackIds(HOME_PLAYLIST_ID, controller.signal).then(
+        (ids) => {
+          if (!controller.signal.aborted) setHiddenTrackIds(new Set(ids));
+        }
+      );
+    }, HOME_HIDE_DELAY_MS);
     return () => {
       controller.abort();
       window.clearTimeout(syncTimer);
+      window.clearTimeout(hideTimer);
     };
   }, [sessionState, refreshKey]);
 

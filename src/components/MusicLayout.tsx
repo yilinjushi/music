@@ -9,6 +9,8 @@ interface MusicLayoutProps {
   hidePlayer?: boolean;
   className?: string;
   isTab?: boolean;
+  /** 页面自己管理滚动（如歌曲列表）时，外层不允许滑动 */
+  lockScroll?: boolean;
 }
 
 export function MusicLayout({
@@ -19,6 +21,7 @@ export function MusicLayout({
   hidePlayer,
   className,
   isTab = true,
+  lockScroll = false,
 }: MusicLayoutProps) {
   return (
     <div
@@ -33,7 +36,12 @@ export function MusicLayout({
 
       {/* Main Content */}
       <div className="flex-1 min-h-0 relative">
-        <div className={cn("h-full overflow-auto scrollbar-hide")}>
+        <div
+          className={cn(
+            "h-full scrollbar-hide overscroll-none",
+            lockScroll ? "overflow-hidden" : "overflow-auto"
+          )}
+        >
           {children}
         </div>
       </div>

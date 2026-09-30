@@ -1,7 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { memo, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LyricsPanel } from "./LyricsPanel";
@@ -127,7 +127,27 @@ export function FullScreenPlayer({
   onClose,
 }: FullScreenPlayerProps) {
   const isMounted = useMounted();
-  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const swipe = useRef<{
+    x: number;
+    y: number;
+    lastX: number;
+    lastT: number;
+    speed: number;
+    axis: "x" | "y" | null;
+  } | null>(null);
+
+  // 重新打开时清掉上次滑出屏幕留下的位移
+  useEffect(() => {
+    const el = dialogRef.current;
+    if (isFullScreen && el) {
+      el.style.transition = "none";
+      el.style.transform = "";
+      requestAnimationFrame(() => {
+        el.style.transition = "";
+      });
+    }
+  }, [isFullScreen]);
   const {
     showLyrics,
     setShowLyrics,
@@ -224,24 +244,61 @@ export function FullScreenPlayer({
 
   if (!isMounted) return null;
 
-  // 右滑返回列表：横向划过 80px 以上、明显多于竖向、且不是从进度条开始
+  // 右滑返回列表：整个播放界面跟着手指往右滑，松手时够远或够快就滑出屏幕
   const onSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
     const inside = event.currentTarget.contains(event.target as Node);
     const onSlider = (event.target as HTMLElement).closest?.('[role="slider"]');
     const touch = event.touches[0];
-    swipeStart.current =
+    swipe.current =
       inside && !onSlider && touch
-        ? { x: touch.clientX, y: touch.clientY }
+        ? {
+            x: touch.clientX,
+            y: touch.clientY,
+            lastX: touch.clientX,
+            lastT: event.timeStamp,
+            speed: 0,
+            axis: null,
+          }
         : null;
   };
+  const onSwipeMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    const state = swipe.current;
+    const el = dialogRef.current;
+    const touch = event.touches[0];
+    if (!state || !el || !touch) return;
+    const dx = touch.clientX - state.x;
+    const dy = touch.clientY - state.y;
+    if (!state.axis) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      state.axis = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.5 ? "x" : "y";
+    }
+    if (state.axis !== "x") return;
+    const dt = event.timeStamp - state.lastT;
+    if (dt > 0) state.speed = (touch.clientX - state.lastX) / dt;
+    state.lastX = touch.clientX;
+    state.lastT = event.timeStamp;
+    el.style.transition = "none";
+    el.style.transform = `translateX(${Math.max(0, dx)}px)`;
+  };
   const onSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
-    const start = swipeStart.current;
-    swipeStart.current = null;
+    const state = swipe.current;
+    swipe.current = null;
+    const el = dialogRef.current;
     const touch = event.changedTouches[0];
-    if (!start || !touch || !isFullScreen) return;
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-    if (dx > 80 && Math.abs(dy) < dx / 2) onClose();
+    if (!state || state.axis !== "x" || !el || !touch) return;
+    const dx = touch.clientX - state.x;
+    const width = window.innerWidth;
+    el.style.transition = "transform 200ms ease-out";
+    if (isFullScreen && (dx > width * 0.35 || state.speed > 0.6)) {
+      el.style.transform = `translateX(${width}px)`;
+      window.setTimeout(onClose, 200);
+    } else {
+      el.style.transform = "translateX(0)";
+      window.setTimeout(() => {
+        el.style.transition = "";
+        el.style.transform = "";
+      }, 200);
+    }
   };
 
   // 循环切换播放模式：none → repeat → shuffle → none
@@ -270,8 +327,11 @@ export function FullScreenPlayer({
       aria-modal={isFullScreen || undefined}
       aria-hidden={!isFullScreen}
       inert={!isFullScreen}
+      ref={dialogRef}
       onTouchStart={onSwipeStart}
+      onTouchMove={onSwipeMove}
       onTouchEnd={onSwipeEnd}
+      onTouchCancel={onSwipeEnd}
       className={cn(
         "fixed inset-0 z-50 transition-transform duration-500 ease-in-out flex flex-col",
         isFullScreen ? "translate-y-0" : "translate-y-full"

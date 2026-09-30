@@ -36,16 +36,14 @@ describe("application bootstrap", () => {
     document.body.innerHTML = '<div id="root"></div>';
   });
 
-  it("starts retired-capability cleanup immediately and awaits it before rendering", async () => {
+  it("starts retired-capability cleanup immediately without delaying the first render", async () => {
     await import("./main");
 
     expect(bootstrapMocks.purgeLegacyAlbumRestore).toHaveBeenCalledTimes(1);
     expect(bootstrapMocks.cleanup).toHaveBeenCalledTimes(1);
-    expect(bootstrapMocks.render).not.toHaveBeenCalled();
+    // The cleanup promise is still pending, yet the UI has rendered.
+    expect(bootstrapMocks.render).toHaveBeenCalledTimes(1);
 
     bootstrapMocks.resolveCleanup();
-    await vi.waitFor(() => {
-      expect(bootstrapMocks.render).toHaveBeenCalledTimes(1);
-    });
   });
 });
