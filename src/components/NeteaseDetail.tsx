@@ -24,7 +24,6 @@ import {
   Bookmark,
   ListMusic,
   Download,
-  Play,
   Search,
   X,
 } from "lucide-react";
@@ -601,13 +600,6 @@ export function NeteaseDetail({
   if (compact && !loading && !error && detail) {
     const total = detail.trackCount;
     const cached = cacheStatus?.ready ?? 0;
-    const playAll = () => {
-      if (visibleTracks.length === 0) return;
-      const index = isShuffle
-        ? Math.floor(Math.random() * visibleTracks.length)
-        : 0;
-      onPlay(visibleTracks[index], visibleTracks);
-    };
     const headerLead = searchOpen ? (
       <Input
         autoFocus
@@ -618,14 +610,6 @@ export function NeteaseDetail({
       />
     ) : (
       <div className="flex min-w-0 items-center gap-3">
-        <Button
-          size="icon"
-          className="h-12 w-12 shrink-0"
-          onClick={playAll}
-          aria-label="播放全部"
-        >
-          <Play className="h-6 w-6 fill-current" />
-        </Button>
         <div className="flex min-w-0 flex-col leading-tight">
           <span className="text-xl font-bold tabular-nums text-foreground">
             {cached}/{total}
