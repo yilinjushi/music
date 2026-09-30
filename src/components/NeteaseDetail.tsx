@@ -328,7 +328,7 @@ export function NeteaseDetail({
   const handleCachePlaylist = () => {
     if (!id || type !== "playlist" || !authenticated) return;
     if (uncachedCount === 0) {
-      toast.success("全部歌曲都已缓存，无需手动缓存");
+      toast.success("云端已全部缓存，无需手动缓存");
       return;
     }
     requestNeteasePlaylistSync(id);
@@ -565,7 +565,7 @@ export function NeteaseDetail({
               {uncachedCount === null
                 ? "缓存到云端"
                 : uncachedCount === 0
-                  ? "已全部缓存"
+                  ? "云端已全部缓存"
                   : `缓存到云端（还有 ${uncachedCount} 首未缓存）`}
             </DropdownMenuItem>
           )}
@@ -600,6 +600,22 @@ export function NeteaseDetail({
   if (compact && !loading && !error && detail) {
     const total = detail.trackCount;
     const cached = cacheStatus?.ready ?? 0;
+    const unavailableCount = cacheStatus?.unavailable.length ?? 0;
+    const cloudStatusText = [
+      cached >= total - unavailableCount
+        ? "云端已全部缓存"
+        : `云端已缓存 ${cached}/${total}`,
+      `无音源 ${unavailableCount} 首`,
+      offline
+        ? `手机已存 ${offline.stored}/${offline.total}${
+            offline.running ? "（下载中）" : ""
+          }${
+            offlineBytes ? ` · ${(offlineBytes / 1024 ** 3).toFixed(1)} GB` : ""
+          }`
+        : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     const headerLead = searchOpen ? (
       <Input
         autoFocus
@@ -615,17 +631,7 @@ export function NeteaseDetail({
             {cached}/{total}
           </span>
           <span className="text-xs text-muted-foreground">
-            {offline
-              ? `本机 ${offline.stored}/${offline.total}${
-                  offline.running ? " 下载中" : ""
-                }${
-                  offlineBytes
-                    ? ` · ${(offlineBytes / 1024 ** 3).toFixed(1)} GB`
-                    : ""
-                } · 无音源 ${cacheStatus?.unavailable.length ?? 0}`
-              : cached >= total - (cacheStatus?.unavailable.length ?? 0)
-                ? `已全部缓存 · 无音源隐藏 ${cacheStatus?.unavailable.length ?? 0} 首`
-                : `已缓存 ${cached} 首 · 共 ${total} 首`}
+            {cloudStatusText}
           </span>
         </div>
       </div>
