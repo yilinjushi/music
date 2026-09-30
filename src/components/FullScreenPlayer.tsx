@@ -1,7 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { LyricsPanel } from "./LyricsPanel";
@@ -127,6 +127,7 @@ export function FullScreenPlayer({
   onClose,
 }: FullScreenPlayerProps) {
   const isMounted = useMounted();
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const {
     showLyrics,
     setShowLyrics,
@@ -223,6 +224,26 @@ export function FullScreenPlayer({
 
   if (!isMounted) return null;
 
+  // 右滑返回列表：横向划过 80px 以上、明显多于竖向、且不是从进度条开始
+  const onSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    const inside = event.currentTarget.contains(event.target as Node);
+    const onSlider = (event.target as HTMLElement).closest?.('[role="slider"]');
+    const touch = event.touches[0];
+    swipeStart.current =
+      inside && !onSlider && touch
+        ? { x: touch.clientX, y: touch.clientY }
+        : null;
+  };
+  const onSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    const touch = event.changedTouches[0];
+    if (!start || !touch || !isFullScreen) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (dx > 80 && Math.abs(dy) < dx / 2) onClose();
+  };
+
   // 循环切换播放模式：none → repeat → shuffle → none
   const handleModeToggle = () => {
     if (!isShuffle && !isRepeat) toggleRepeat();
@@ -249,6 +270,8 @@ export function FullScreenPlayer({
       aria-modal={isFullScreen || undefined}
       aria-hidden={!isFullScreen}
       inert={!isFullScreen}
+      onTouchStart={onSwipeStart}
+      onTouchEnd={onSwipeEnd}
       className={cn(
         "fixed inset-0 z-50 transition-transform duration-500 ease-in-out flex flex-col",
         isFullScreen ? "translate-y-0" : "translate-y-full"
