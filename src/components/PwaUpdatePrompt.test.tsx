@@ -175,16 +175,12 @@ describe("PwaUpdatePrompt", () => {
     });
     expect(pwaMocks.updateServiceWorker).not.toHaveBeenCalled();
 
-    act(() => {
+    await act(async () => {
       paused = true;
       audio.dispatchEvent(new Event("pause"));
-    });
-    expect(updateButton.disabled).toBe(false);
-
-    await act(async () => {
-      updateButton.click();
       await Promise.resolve();
     });
+    // Update now applies automatically once playback is idle.
     expect(pwaMocks.updateServiceWorker).toHaveBeenCalledWith(true);
     audio.remove();
   });

@@ -44,8 +44,6 @@ export function PwaUpdatePrompt() {
     };
   }, [needRefresh]);
 
-  if (!needRefresh) return null;
-
   const playbackActive = isPlaying || mediaIsPlaying;
 
   const applyUpdate = async () => {
@@ -74,6 +72,14 @@ export function PwaUpdatePrompt() {
     }
   };
 
+  // Auto-apply as soon as playback is idle (e.g. on launch or after pause).
+  useEffect(() => {
+    if (needRefresh && !playbackActive && !isApplying) void applyUpdate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needRefresh, playbackActive]);
+
+  if (!needRefresh) return null;
+
   return (
     <section
       aria-live="polite"
@@ -85,8 +91,8 @@ export function PwaUpdatePrompt() {
           <p className="text-sm font-medium">新版本已准备好</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
             {playbackActive
-              ? "请先暂停音乐，再刷新到新版本"
-              : "由你决定何时刷新，不会自动打断播放"}
+              ? "暂停音乐后会自动更新，不会打断播放"
+              : "正在自动更新…"}
           </p>
         </div>
         <button
