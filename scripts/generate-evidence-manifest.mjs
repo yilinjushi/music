@@ -10,6 +10,10 @@ import {
   sha256File,
   writeJson,
 } from "./evidence-utils.mjs";
+import {
+  loadAuditExceptions,
+  unexcusedVulnerabilities,
+} from "./audit-exceptions.mjs";
 import { analyzeSyntheticStaticDelivery } from "./lighthouse-static-delivery.mjs";
 import { snapshotDist } from "./lighthouse-dist-snapshot.mjs";
 import { verifyPlaywrightEvidence } from "./verify-playwright-evidence.mjs";
@@ -165,10 +169,17 @@ function auditGate(root, id, file) {
   if (evidence.error) reasons.push(evidence.error);
   const counts = evidence.value?.metadata?.vulnerabilities;
   const keys = ["info", "low", "moderate", "high", "critical", "total"];
+  // Only findings matching a reviewed package + advisory exception may remain.
+  const unexcused = unexcusedVulnerabilities(
+    evidence.value,
+    loadAuditExceptions(root)
+  );
   if (
     !counts ||
-    keys.some((key) => !Number.isInteger(counts[key]) || counts[key] !== 0) ||
-    Object.keys(evidence.value?.vulnerabilities ?? {}).length !== 0
+    keys.some((key) => !Number.isInteger(counts[key])) ||
+    unexcused.length !== 0 ||
+    (counts.total === 0) !==
+      (Object.keys(evidence.value?.vulnerabilities ?? {}).length === 0)
   ) {
     reasons.push(`${file} must contain a zero-vulnerability npm audit result`);
   }

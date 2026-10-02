@@ -1,0 +1,8 @@
+[
+  {
+    "package": "node-forge",
+    "advisory": "GHSA-86w9-cpqp-85rv",
+    "reason": "Only RSA PKCS#1 v1.5 signature verification is affected. The app uses node-forge for AES/RSA encryption, MD5 and base64/UTF-8 helpers and never verifies signatures. No patched release exists yet. Approved by owner 2026-10-02.",
+    "reviewBy": "2026-12-31"
+  }
+]

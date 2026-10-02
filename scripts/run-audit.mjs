@@ -3,6 +3,10 @@ import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { npmInvocation, projectRoot, writeJson } from "./evidence-utils.mjs";
 import { acquireEvidencePipelineLock } from "./exclusive-run-lock.mjs";
+import {
+  loadAuditExceptions,
+  unexcusedVulnerabilities,
+} from "./audit-exceptions.mjs";
 
 function option(name) {
   const index = process.argv.indexOf(name);
@@ -59,14 +63,21 @@ writeJson(output, payload);
 
 if (audit.stderr) process.stderr.write(audit.stderr);
 const vulnerabilities = payload?.metadata?.vulnerabilities ?? null;
+const unexcused =
+  payload?.vulnerabilities && !payload.error
+    ? unexcusedVulnerabilities(payload, loadAuditExceptions(projectRoot))
+    : null;
+const passed =
+  audit.status === 0 || (Array.isArray(unexcused) && unexcused.length === 0);
 console.log(
   JSON.stringify(
     {
-      ok: audit.status === 0,
+      ok: passed,
       scope: omitDev ? "production" : "complete",
       auditLevel: level,
       output: outputArg,
       vulnerabilities,
+      unexcused,
     },
     null,
     2
@@ -77,4 +88,4 @@ if (audit.error) {
   console.error(audit.error.message);
   process.exit(1);
 }
-if (audit.status !== 0) process.exit(audit.status ?? 1);
+if (!passed) process.exit(audit.status || 1);
