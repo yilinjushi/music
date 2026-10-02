@@ -22,6 +22,22 @@ export function GlobalMusicPlayer() {
     setCoverUrl(coverUrl);
   }, [coverUrl, setCoverUrl]);
 
+  // Returning to the app while music plays: go straight to the player.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible") return;
+      const state = useMusicStore.getState();
+      const audio = audioRef.current;
+      const playing = state.isPlaying || (audio != null && !audio.paused);
+      if (playing && state.queue[state.currentIndex]) {
+        state.setIsFullScreenPlayer(true);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [audioRef]);
+
   const isSwitchingTrackRef = useRef(false);
   const hasRecordedRef = useRef(false);
 
