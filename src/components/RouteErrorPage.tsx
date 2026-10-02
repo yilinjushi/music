@@ -5,10 +5,20 @@ import {
 } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { PageError } from "@/components/PageError";
+import {
+  isDynamicImportError,
+  reloadOnceForStaleChunk,
+} from "@/components/ErrorBoundary";
+import { useEffect } from "react";
 
 export function RouteErrorPage() {
   const error = useRouteError();
   const navigate = useNavigate();
+
+  // 新版本上线后旧资源已删除：自动刷新一次拿到新版本。
+  useEffect(() => {
+    if (isDynamicImportError(error)) reloadOnceForStaleChunk();
+  }, [error]);
 
   // 1. 状态与展示内容解析
   const is404 = isRouteErrorResponse(error) && error.status === 404;

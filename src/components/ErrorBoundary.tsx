@@ -16,7 +16,24 @@ const dynamicImportErrorPatterns = [
   "importing a module script failed",
   "chunkloaderror",
   "loading chunk",
+  // Safari: a removed chunk is served as the SPA index.html after a deploy.
+  "is not a valid javascript mime type",
 ];
+
+const reloadGuardKey = "music:chunk-reload-at";
+
+/** 资源失效时自动刷新一次；短时间内已刷新过则返回 false，避免死循环。 */
+export function reloadOnceForStaleChunk(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(reloadGuardKey) || 0);
+    if (Date.now() - last < 30_000) return false;
+    sessionStorage.setItem(reloadGuardKey, String(Date.now()));
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
+}
 
 /** 判断错误是否来自构建产物更新后的动态导入资源失效。 */
 export function isDynamicImportError(error: unknown): boolean {
@@ -44,6 +61,7 @@ export class ErrorBoundary extends Component<
 
   /** 记录 React 错误边界捕获到的异常上下文。 */
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    if (isDynamicImportError(error) && reloadOnceForStaleChunk()) return;
     logger.error(
       "ErrorBoundary",
       error.message || "React render error",

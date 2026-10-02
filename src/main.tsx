@@ -3,7 +3,15 @@ import { createRoot } from "react-dom/client";
 import "./assets/global.css";
 import RootLayout from "./Layout";
 import App from "./App";
-import { ErrorBoundary } from "./components/ErrorBoundary";
+import {
+  ErrorBoundary,
+  reloadOnceForStaleChunk,
+} from "./components/ErrorBoundary";
+
+// A deploy removed the old lazy chunks this page still references.
+window.addEventListener("vite:preloadError", (event) => {
+  if (reloadOnceForStaleChunk()) event.preventDefault();
+});
 import { initializeLogger } from "./lib/logger";
 import { clearRetiredSyncArtifacts } from "./lib/legacy-offline-cleanup";
 import { purgeLegacyAlbumSheetRestoreSession } from "./lib/navigation/netease-detail-navigation";

@@ -93,6 +93,8 @@ describe("ErrorBoundary", () => {
       );
     });
 
+    // Auto-reloads once for a stale chunk.
+    expect(reload).toHaveBeenCalledTimes(1);
     expect(container?.textContent).toContain("应用已更新");
     expect(container?.textContent).toContain(
       "当前版本资源已刷新，请重新加载应用"
@@ -104,7 +106,8 @@ describe("ErrorBoundary", () => {
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(reload).toHaveBeenCalledTimes(2);
+    sessionStorage.clear();
 
     Object.defineProperty(window, "location", {
       configurable: true,
