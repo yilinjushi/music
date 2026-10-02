@@ -28,7 +28,7 @@ export function GlobalMusicPlayer() {
       if (document.visibilityState !== "visible") return;
       const state = useMusicStore.getState();
       const audio = audioRef.current;
-      const playing = state.isPlaying || (audio != null && !audio.paused);
+      const playing = state.isPlaying || (audio !== null && !audio.paused);
       if (playing && state.queue[state.currentIndex]) {
         state.setIsFullScreenPlayer(true);
       }
