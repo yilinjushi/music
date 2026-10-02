@@ -172,6 +172,16 @@ export function useMediaSessionIntegration(
       ],
     ];
 
+    // iOS shows "skip 10s" on the lock screen whenever these are set; clear
+    // them explicitly so previous/next are shown instead.
+    for (const action of ["seekbackward", "seekforward"] as const) {
+      try {
+        mediaSession.setActionHandler(action, null);
+      } catch {
+        // Not supported by this browser.
+      }
+    }
+
     const registeredActions: MediaSessionAction[] = [];
     for (const [action, handler] of actionHandlers) {
       try {
