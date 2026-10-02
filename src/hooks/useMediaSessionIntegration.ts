@@ -170,20 +170,6 @@ export function useMediaSessionIntegration(
           if (seekTime !== undefined) seek(seekTime);
         },
       ],
-      [
-        "seekbackward",
-        ({ seekOffset }) => {
-          const audio = audioRef.current;
-          if (audio) seek(audio.currentTime - (seekOffset ?? 10));
-        },
-      ],
-      [
-        "seekforward",
-        ({ seekOffset }) => {
-          const audio = audioRef.current;
-          if (audio) seek(audio.currentTime + (seekOffset ?? 10));
-        },
-      ],
     ];
 
     const registeredActions: MediaSessionAction[] = [];
