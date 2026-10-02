@@ -363,7 +363,14 @@ export function FullScreenPlayer({
           onClick={() => setQualityDrawerOpen(true)}
           aria-label={`选择播放音质，当前 ${getQualityShortLabel(quality)}`}
         >
-          {!showLyrics && getQualityShortLabel(quality)}
+          {!showLyrics && (
+            <span className="flex flex-col items-center leading-tight">
+              {getQualityShortLabel(quality)}
+              <span className="text-[10px] tracking-normal text-white/30">
+                {__BUILD_ID__}
+              </span>
+            </span>
+          )}
         </Button>
         <Button
           variant="ghost"

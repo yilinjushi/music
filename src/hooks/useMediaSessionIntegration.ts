@@ -172,32 +172,47 @@ export function useMediaSessionIntegration(
       ],
     ];
 
-    // iOS shows "skip 10s" on the lock screen whenever these are set; clear
-    // them explicitly so previous/next are shown instead.
-    for (const action of ["seekbackward", "seekforward"] as const) {
-      try {
-        mediaSession.setActionHandler(action, null);
-      } catch {
-        // Not supported by this browser.
+    const registeredActions = new Set<MediaSessionAction>();
+    const register = () => {
+      // iOS shows "skip 10s" on the lock screen whenever these are set; clear
+      // them explicitly so previous/next are shown instead.
+      for (const action of ["seekbackward", "seekforward"] as const) {
+        try {
+          mediaSession.setActionHandler(action, null);
+        } catch {
+          // Not supported by this browser.
+        }
       }
-    }
+      for (const [action, handler] of actionHandlers) {
+        try {
+          mediaSession.setActionHandler(action, handler);
+          registeredActions.add(action);
+        } catch (error) {
+          logger.error(
+            "MediaSession",
+            "Failed to register action handler",
+            error,
+            { action }
+          );
+        }
+      }
+    };
 
-    const registeredActions: MediaSessionAction[] = [];
-    for (const [action, handler] of actionHandlers) {
-      try {
-        mediaSession.setActionHandler(action, handler);
-        registeredActions.push(action);
-      } catch (error) {
-        logger.error(
-          "MediaSession",
-          "Failed to register action handler",
-          error,
-          { action }
-        );
-      }
-    }
+    register();
+    // iOS may rebuild its Now Playing controls when media starts or the source
+    // changes, so re-apply the handlers at those moments.
+    const audio = audioRef.current;
+    const reapplyEvents: Array<keyof HTMLMediaElementEventMap> = [
+      "loadedmetadata",
+      "play",
+      "playing",
+    ];
+    reapplyEvents.forEach((event) => audio?.addEventListener(event, register));
 
     return () => {
+      reapplyEvents.forEach((event) =>
+        audio?.removeEventListener(event, register)
+      );
       registeredActions.forEach((action) => {
         try {
           mediaSession.setActionHandler(action, null);
