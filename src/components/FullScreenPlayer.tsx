@@ -4,7 +4,6 @@ import { createPortal } from "react-dom";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LyricsPanel } from "./LyricsPanel";
 import { MusicCover } from "./MusicCover";
 import { PlayerProgressBar } from "./PlayerProgressBar";
 import { MusicTrack } from "@/types/music";
@@ -149,8 +148,6 @@ export function FullScreenPlayer({
     }
   }, [isFullScreen]);
   const {
-    showLyrics,
-    setShowLyrics,
     moreDrawerOpen,
     setMoreDrawerOpen,
     isAddToPlaylistOpen,
@@ -363,7 +360,7 @@ export function FullScreenPlayer({
           onClick={() => setQualityDrawerOpen(true)}
           aria-label={`选择播放音质，当前 ${getQualityShortLabel(quality)}`}
         >
-          {!showLyrics && getQualityShortLabel(quality)}
+          {getQualityShortLabel(quality)}
         </Button>
         <Button
           variant="ghost"
@@ -376,41 +373,21 @@ export function FullScreenPlayer({
         </Button>
       </header>
 
-      <div
-        className="flex-1 flex flex-col items-center justify-center px-2 relative z-10 overflow-hidden cursor-pointer"
-        onClick={() => {
-          setShowLyrics(!showLyrics);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            setShowLyrics((visible) => !visible);
-          }
-        }}
-        role="button"
-        tabIndex={0}
-        aria-pressed={showLyrics}
-        aria-label={showLyrics ? "显示专辑封面" : "显示歌词"}
-      >
-        {showLyrics ? (
-          <div className="w-full h-full">
-            <LyricsPanel track={currentTrack} active={isFullScreen} />
-          </div>
-        ) : (
-          <div
-            className={cn(
-              "relative aspect-square w-72 max-w-[320px] overflow-hidden rounded-3xl transition-transform duration-500 ring-1 ring-white/5",
-              isPlaying ? "scale-100" : "scale-[0.95]"
-            )}
-          >
-            <MusicCover
-              src={coverUrl}
-              alt={currentTrack?.name}
-              className="h-full w-full object-cover dark select-none touch-none"
-              iconClassName="h-16 w-16 text-white/30"
-            />
-          </div>
-        )}
+      {/* Lyrics removed to save battery: cover only. */}
+      <div className="flex-1 flex flex-col items-center justify-center px-2 relative z-10 overflow-hidden">
+        <div
+          className={cn(
+            "relative aspect-square w-72 max-w-[320px] overflow-hidden rounded-3xl transition-transform duration-500 ring-1 ring-white/5",
+            isPlaying ? "scale-100" : "scale-[0.95]"
+          )}
+        >
+          <MusicCover
+            src={coverUrl}
+            alt={currentTrack?.name}
+            className="h-full w-full object-cover dark select-none touch-none"
+            iconClassName="h-16 w-16 text-white/30"
+          />
+        </div>
       </div>
 
       <div className="shrink-0 px-8 py-4 relative z-10">
