@@ -1111,14 +1111,16 @@ test("a waiting service-worker update never interrupts active playback", async (
     .toContain("/sw.js");
   await writeFile(workerFilePath, originalWorker, "utf8");
   replacedWorkerFiles.delete(workerFilePath);
-  await expect(prompt.getByText("请先暂停音乐，再刷新到新版本")).toBeVisible();
+  await expect(
+    prompt.getByText("暂停音乐后会自动更新，不会打断播放")
+  ).toBeVisible();
   await expect(
     prompt.getByRole("button", { name: "更新", exact: true })
   ).toBeDisabled();
   await expect(page.getByRole("button", { name: "暂停" })).toBeVisible();
 
   // Once the listener has proved it will not interrupt playback, pause and
-  // exercise the complete user-approved activation/reload path. The marker is
+  // exercise the complete automatic activation/reload path. The marker is
   // session-scoped so it survives the reload but cannot fake persisted player
   // state.
   await page.evaluate(() => {
@@ -1174,35 +1176,19 @@ test("a waiting service-worker update never interrupts active playback", async (
         ),
       {
         message: "The observed playback position was not persisted",
-        timeout: 5_000,
+        // Store persistence is coalesced to one write per 5s.
+        timeout: 10_000,
       }
     )
     .toBe(37);
-  await page.getByRole("button", { name: "暂停" }).click();
-  await expect
-    .poll(() =>
-      page.evaluate(() => document.querySelector("audio")?.paused ?? true)
-    )
-    .toBe(true);
-  const updateButton = prompt.getByRole("button", {
-    name: "更新",
-    exact: true,
-  });
-  await expect(updateButton).toBeEnabled();
-  await expect(
-    page.getByRole("button", {
-      name: "打开正在播放：测试曲目一",
-      exact: true,
-    })
-  ).toBeVisible();
-
+  // Pausing lets the waiting update apply itself and reload the page.
   const reloaded = page.waitForEvent("framenavigated", (frame) => {
     return (
       frame === page.mainFrame() &&
       new URL(frame.url()).pathname === "/playlist/e2e-playlist"
     );
   });
-  await updateButton.click();
+  await page.getByRole("button", { name: "暂停" }).click();
   await reloaded;
   await page.waitForLoadState("domcontentloaded");
 
