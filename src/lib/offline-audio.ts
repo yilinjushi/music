@@ -150,6 +150,8 @@ async function runSync(
 
   for (const path of missing) {
     if (!navigator.onLine) break;
+    // Never download in the background: radio + disk writes heat the phone.
+    if (document.visibilityState === "hidden") break;
     try {
       const response = await fetch(path, {
         credentials: "include",

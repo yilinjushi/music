@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import { throttle } from "@/lib/utils";
 import { useMusicStore, type MusicState } from "@/store/music-store";
 import { useSourceQualityStore } from "@/store/source-quality-store";
-import { useHistoryStore } from "@/store/history-store";
 import toast from "react-hot-toast";
 import { logger } from "@/lib/logger";
 import { syncMediaSessionPosition } from "@/lib/media-session";
@@ -186,7 +185,7 @@ export function useAudioEventHandlers(
         if (!hasRecordedRef.current && track) {
           hasRecordedRef.current = true;
           useSourceQualityStore.getState().recordSuccess(track.source);
-          useHistoryStore.getState().addToHistory(track);
+          // Play history is intentionally not recorded (saves battery).
         }
       },
 

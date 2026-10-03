@@ -263,8 +263,21 @@ export function NeteaseDetail({
     if (!compact || !id || type !== "playlist" || !authenticated) return;
     let cancelled = false;
     const timers: number[] = [];
+    let waitingForVisible: (() => void) | null = null;
     const run = async (round: number) => {
       if (cancelled) return;
+      // Background = no network/disk work; resume once the app is visible.
+      if (document.visibilityState === "hidden") {
+        if (waitingForVisible) return;
+        waitingForVisible = () => {
+          if (document.visibilityState === "hidden") return;
+          document.removeEventListener("visibilitychange", waitingForVisible!);
+          waitingForVisible = null;
+          void run(round);
+        };
+        document.addEventListener("visibilitychange", waitingForVisible);
+        return;
+      }
       requestNeteasePlaylistSync(id);
       const ids = await getOfflineTrackIds(id);
       if (cancelled || !ids) return;
@@ -283,6 +296,8 @@ export function NeteaseDetail({
     return () => {
       cancelled = true;
       timers.forEach((timer) => window.clearTimeout(timer));
+      if (waitingForVisible)
+        document.removeEventListener("visibilitychange", waitingForVisible);
     };
   }, [compact, id, type, authenticated]);
 

@@ -314,7 +314,7 @@ export function LyricsPanel({ track, active = true }: LyricsPanelProps) {
     isAutoScrollingRef.current = true;
     container.scrollTo({
       top: offset,
-      behavior: "smooth",
+      behavior: "auto",
     });
 
     const onScrollEnd = () => {
