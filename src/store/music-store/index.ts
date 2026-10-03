@@ -126,9 +126,8 @@ export function sanitizePersistedMusicSettings(
     safe.currentIndex = value.currentIndex;
   }
   if (isFiniteInRange(value.volume, 0, 1)) safe.volume = value.volume;
-  if (isFiniteInRange(value.currentAudioTime, 0, Number.MAX_SAFE_INTEGER)) {
-    safe.currentAudioTime = value.currentAudioTime;
-  }
+  // The in-song position is intentionally not persisted: the app resumes
+  // from the start of the last track, so playback never needs to save.
   if (isFiniteInRange(value.duration, 0, Number.MAX_SAFE_INTEGER)) {
     safe.duration = value.duration;
   }
@@ -239,8 +238,9 @@ const PERSIST_WRITE_DELAY_MS = 5_000;
 /**
  * Coalesce persisted writes. Playback updates the store every second; writing
  * (sanitize + serialize + IndexedDB) on each update keeps the phone busy and
- * warm. Only the latest value is written, at most once per delay, and pending
- * writes are flushed when the page is hidden or unloaded.
+ * warm. Only the latest value is written, at most once per delay. Nothing is
+ * written while the page is hidden; pending writes are flushed on hide (once),
+ * on return to the foreground, and on unload.
  */
 export function createThrottledPersistStorage<T>(
   inner: PersistStorage<T>,
@@ -251,6 +251,8 @@ export function createThrottledPersistStorage<T>(
     value: Parameters<PersistStorage<T>["setItem"]>[1];
   } | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  const isHidden = () =>
+    typeof document !== "undefined" && document.visibilityState === "hidden";
 
   const flush = () => {
     if (timer) clearTimeout(timer);
@@ -262,15 +264,16 @@ export function createThrottledPersistStorage<T>(
 
   if (typeof window !== "undefined") {
     window.addEventListener("pagehide", () => void flush());
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "hidden") void flush();
-    });
+    document.addEventListener("visibilitychange", () => void flush());
   }
 
   return {
     getItem: (name) => inner.getItem(name),
     setItem: (name, value) => {
       pending = { name, value };
+      // Never write in the background; the pending value is saved when the
+      // page becomes visible again (or on pagehide).
+      if (isHidden()) return;
       timer ??= setTimeout(() => void flush(), delayMs);
     },
     removeItem: (name) => {

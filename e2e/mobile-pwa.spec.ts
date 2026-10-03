@@ -1135,13 +1135,15 @@ test("a waiting service-worker update never interrupts active playback", async (
     audio.currentTime = 37;
     audio.dispatchEvent(new Event("durationchange"));
   });
-  // The production timeupdate handler is throttled to one write per second.
-  // Wait a complete window, then prove the exact persisted value rather than
-  // relying on an arbitrary delay before the user approves the update.
+  // The in-song position is deliberately never persisted (the app resumes from
+  // the start of the last track). Let a full timeupdate + persistence window
+  // pass, then prove no position was written.
   await page.waitForTimeout(1_100);
   await page.evaluate(() => {
     document.querySelector("audio")?.dispatchEvent(new Event("timeupdate"));
   });
+  // Coalesced persistence writes at most once per 5s.
+  await page.waitForTimeout(5_500);
   await expect
     .poll(
       () =>
@@ -1175,12 +1177,11 @@ test("a waiting service-worker update never interrupts active playback", async (
             })
         ),
       {
-        message: "The observed playback position was not persisted",
-        // Store persistence is coalesced to one write per 5s.
+        message: "The in-song playback position must not be persisted",
         timeout: 10_000,
       }
     )
-    .toBe(37);
+    .not.toBe(37);
   // Pausing lets the waiting update apply itself and reload the page.
   const reloaded = page.waitForEvent("framenavigated", (frame) => {
     return (
@@ -1226,7 +1227,8 @@ test("a waiting service-worker update never interrupts active playback", async (
     .click();
   const restoredProgress = page.getByRole("slider", { name: "播放进度" });
   await expect(restoredProgress).toHaveAttribute("aria-valuemax", "180");
-  await expect(restoredProgress).toHaveAttribute("aria-valuenow", "37");
+  // Resumes from the start of the restored track.
+  await expect(restoredProgress).toHaveAttribute("aria-valuenow", "0");
   await page.getByRole("button", { name: "收起全屏播放器" }).click();
   await expect(
     page.getByRole("button", { name: "播放", exact: true })

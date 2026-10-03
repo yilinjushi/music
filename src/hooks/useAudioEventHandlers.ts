@@ -73,8 +73,8 @@ export function useAudioEventHandlers(
           state.setAudioCurrentTime(audio.currentTime);
         }
         if (!audio.paused && !state.isPlaying) state.setIsPlaying(true);
-
-        syncPositionState();
+        // Lock-screen position is synced on play/pause/seek/duration changes;
+        // the OS extrapolates in between, so no per-second update is needed.
       }, 1000),
 
       durationchange: () => {
@@ -172,6 +172,7 @@ export function useAudioEventHandlers(
 
       play: () => {
         clearPauseTimer();
+        syncPositionState();
         toggleLoading(false);
         if (audio.paused) return;
 
@@ -231,14 +232,17 @@ export function useAudioEventHandlers(
         toggleLoading(false);
       },
       loadedmetadata: () => toggleLoading(false),
+      seeked: syncPositionState,
+      ratechange: syncPositionState,
     };
 
     Object.entries(handlers).forEach(([event, handler]) =>
       audio.addEventListener(event, handler)
     );
 
-    // Record the position when leaving (so it is saved) and when returning.
+    // Refresh the on-screen position when returning to the app.
     const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") return;
       if (!isSwitchingTrackRef.current) {
         getMusicState().setAudioCurrentTime(audio.currentTime);
       }

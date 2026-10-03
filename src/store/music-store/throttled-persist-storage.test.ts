@@ -54,4 +54,26 @@ describe("createThrottledPersistStorage", () => {
     vi.advanceTimersByTime(5_000);
     expect(inner.setItem).toHaveBeenCalledTimes(1);
   });
+
+  it("never writes while hidden and saves once on return", () => {
+    vi.useFakeTimers();
+    const inner = fakeInner();
+    const storage = createThrottledPersistStorage(inner, 5_000);
+    const setVisibility = (state: DocumentVisibilityState) => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: state,
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    };
+
+    setVisibility("hidden");
+    for (let i = 1; i <= 3; i++) storage.setItem("k", value(i));
+    vi.advanceTimersByTime(60_000);
+    expect(inner.setItem).not.toHaveBeenCalled();
+
+    setVisibility("visible");
+    expect(inner.setItem).toHaveBeenCalledTimes(1);
+    expect(inner.setItem).toHaveBeenCalledWith("k", value(3));
+  });
 });
