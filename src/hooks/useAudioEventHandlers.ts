@@ -6,7 +6,6 @@ import toast from "react-hot-toast";
 import { logger } from "@/lib/logger";
 import { syncMediaSessionPosition } from "@/lib/media-session";
 import { getTrackIdentityKey } from "@/lib/utils/track-identity";
-import { markOfflineRouteBroken } from "@/lib/offline-audio";
 
 const PAUSE_CONFIRM_DELAY_MS = 200;
 const MAX_AUTO_MATCH_PER_TRACK = 3;
@@ -209,13 +208,6 @@ export function useAudioEventHandlers(
         // also errors, this marker has already been removed and normal URL
         // recovery proceeds below.
         if (audio.dataset.proxyFallbackRequest) return;
-
-        // WebKit may refuse media loads through the worker route; switch the
-        // offline copies to blob: URLs so the recovery below can succeed.
-        if (audio.src.includes("/offline-audio?")) {
-          audio.dataset.offlineRouteBroken = "1";
-          markOfflineRouteBroken();
-        }
 
         if (!recoveryAttemptedRef.current && state.queue.length > 0) {
           recoveryAttemptedRef.current = true;

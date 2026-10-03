@@ -433,10 +433,7 @@ export function useAudioTrackLoader(
         // 代理备用线路容灾时，直接使用已缓存的远程 URL
         if (
           remoteUrlRef.current &&
-          (navigator.onLine ||
-            remoteUrlRef.current.startsWith("blob:") ||
-            (remoteUrlRef.current.startsWith("/offline-audio?") &&
-              !audio.dataset.offlineRouteBroken))
+          (navigator.onLine || remoteUrlRef.current.startsWith("blob:"))
         )
           return { url: remoteUrlRef.current };
 
