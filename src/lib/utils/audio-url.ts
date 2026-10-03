@@ -10,6 +10,7 @@ const OPAQUE_AUDIO_PATHS = new Set([
   "/music-api/qqmusic/audio",
   "/music-api/migu/audio",
   "/music-api/bilibili/audio",
+  "/offline-audio",
 ]);
 
 /**

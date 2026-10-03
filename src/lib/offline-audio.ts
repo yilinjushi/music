@@ -33,7 +33,35 @@ async function audioPath(songId: string): Promise<string> {
   return `${AUDIO_PATH}${hex}`;
 }
 
-/** A blob: URL for the song if it is stored on this phone, else null. */
+const OFFLINE_ROUTE = "/offline-audio?key=";
+let routeCheck: Promise<boolean> | null = null;
+let routeBroken = false;
+
+/** Whether the active service worker serves OFFLINE_ROUTE (older ones don't). */
+function offlineRouteReady(): Promise<boolean> {
+  if (routeBroken || !navigator.serviceWorker?.controller) {
+    return Promise.resolve(false);
+  }
+  routeCheck ??= fetch("/offline-audio?probe=1", { cache: "no-store" })
+    .then((response) => response.headers.get("X-Offline-Audio") === "1")
+    .catch(() => false)
+    .then((ok) => {
+      if (!ok) routeCheck = null;
+      return ok;
+    });
+  return routeCheck;
+}
+
+/** The media element failed on the worker route: use blob: URLs from now on. */
+export function markOfflineRouteBroken(): void {
+  routeBroken = true;
+}
+
+/**
+ * A URL for the song if it is stored on this phone, else null. When the
+ * service worker controls the page it streams the stored file with byte
+ * ranges (cheap for WebKit); otherwise fall back to a blob: URL.
+ */
 export async function getOfflineAudioUrl(
   track: Pick<MusicTrack, "id" | "source">
 ): Promise<string | null> {
@@ -45,6 +73,9 @@ export async function getOfflineAudioUrl(
     const cache = await caches.open(OFFLINE_CACHE);
     const response = await cache.match(await audioPath(songId));
     if (!response) return null;
+    if (await offlineRouteReady()) {
+      return `${OFFLINE_ROUTE}${(await audioPath(songId)).slice(AUDIO_PATH.length)}`;
+    }
     const blob = await response.blob();
     if (blob.size === 0) return null;
     const url = URL.createObjectURL(
