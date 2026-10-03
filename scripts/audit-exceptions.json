@@ -4,5 +4,11 @@
     "advisory": "GHSA-86w9-cpqp-85rv",
     "reason": "Only RSA PKCS#1 v1.5 signature verification is affected. The app uses node-forge for AES/RSA encryption, MD5 and base64/UTF-8 helpers and never verifies signatures. No patched release exists yet. Approved by owner 2026-10-02.",
     "reviewBy": "2026-12-31"
+  },
+  {
+    "package": "http-cache-semantics",
+    "advisory": "GHSA-ch52-4w7c-c8xp",
+    "reason": "Dev-only: reached via @cyclonedx/cyclonedx-npm > libxmljs2 > node-gyp > make-fetch-happen for SBOM generation in CI. No shared multi-user HTTP cache is involved and no patched release exists. Approved by owner 2026-10-03.",
+    "reviewBy": "2026-12-31"
   }
 ]
