@@ -67,7 +67,11 @@ export function useAudioEventHandlers(
         if (!audio.paused) clearPauseTimer();
 
         const state = getMusicState();
-        state.setAudioCurrentTime(audio.currentTime);
+        // Nobody sees the UI while hidden; skip per-second store updates
+        // (and the re-renders/persistence they trigger) until visible again.
+        if (document.visibilityState !== "hidden") {
+          state.setAudioCurrentTime(audio.currentTime);
+        }
         if (!audio.paused && !state.isPlaying) state.setIsPlaying(true);
 
         syncPositionState();
@@ -233,11 +237,20 @@ export function useAudioEventHandlers(
       audio.addEventListener(event, handler)
     );
 
+    // Record the position when leaving (so it is saved) and when returning.
+    const onVisibilityChange = () => {
+      if (!isSwitchingTrackRef.current) {
+        getMusicState().setAudioCurrentTime(audio.currentTime);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
     return () => {
       clearPauseTimer();
       autoMatchRequestRef.current?.controller.abort();
       autoMatchRequestRef.current = null;
       unsubscribeOwner();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       Object.entries(handlers).forEach(([event, handler]) =>
         audio.removeEventListener(event, handler)
       );

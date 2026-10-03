@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   persist,
   createJSONStorage,
+  type PersistStorage,
   type StateStorage,
 } from "zustand/middleware";
 import { storeKey } from "../store-keys";
@@ -233,6 +234,52 @@ export function createMusicStateStorage(
   });
 }
 
+const PERSIST_WRITE_DELAY_MS = 5_000;
+
+/**
+ * Coalesce persisted writes. Playback updates the store every second; writing
+ * (sanitize + serialize + IndexedDB) on each update keeps the phone busy and
+ * warm. Only the latest value is written, at most once per delay, and pending
+ * writes are flushed when the page is hidden or unloaded.
+ */
+export function createThrottledPersistStorage<T>(
+  inner: PersistStorage<T>,
+  delayMs = PERSIST_WRITE_DELAY_MS
+): PersistStorage<T> {
+  let pending: {
+    name: string;
+    value: Parameters<PersistStorage<T>["setItem"]>[1];
+  } | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    const next = pending;
+    pending = null;
+    if (next) return inner.setItem(next.name, next.value);
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("pagehide", () => void flush());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") void flush();
+    });
+  }
+
+  return {
+    getItem: (name) => inner.getItem(name),
+    setItem: (name, value) => {
+      pending = { name, value };
+      timer ??= setTimeout(() => void flush(), delayMs);
+    },
+    removeItem: (name) => {
+      if (pending?.name === name) pending = null;
+      return inner.removeItem(name);
+    },
+  };
+}
+
 export const useMusicStore = create<MusicState>()(
   persist(
     (...a) => ({
@@ -246,7 +293,9 @@ export const useMusicStore = create<MusicState>()(
     }),
     {
       name: storeKey.MusicStore,
-      storage: createJSONStorage(() => createMusicStateStorage(idbStorage)),
+      storage: createThrottledPersistStorage(
+        createJSONStorage(() => createMusicStateStorage(idbStorage))!
+      ),
       version: MUSIC_STORE_VERSION,
       migrate: (persistedState) => sanitizePersistedMusicState(persistedState),
       merge: (persisted, current) => {
