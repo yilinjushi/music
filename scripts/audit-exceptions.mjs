@@ -1,11 +1,11 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 /** Load reviewed audit exceptions; expired entries are ignored. */
 export function loadAuditExceptions(root, now = new Date()) {
-  const entries = JSON.parse(
-    readFileSync(join(root, "scripts/audit-exceptions.json"), "utf8")
-  );
+  const file = join(root, "scripts/audit-exceptions.json");
+  if (!existsSync(file)) return [];
+  const entries = JSON.parse(readFileSync(file, "utf8"));
   return entries.filter(
     (entry) =>
       typeof entry.package === "string" &&
