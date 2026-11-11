@@ -140,10 +140,7 @@ export const PlaylistDetailRoute = withSuspense(() => {
   );
 });
 
-export const MineRoute = withSuspense(() => {
-  const navigate = useNavigate();
-  return <MinePage onSelectPlaylist={(id) => navigate(`/playlist/${id}`)} />;
-});
+export const MineRoute = withSuspense(() => <MinePage />);
 
 // -- 网易云API详情路由复用逻辑 --
 const createNeteaseRoute = (

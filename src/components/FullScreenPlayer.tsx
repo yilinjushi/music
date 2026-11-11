@@ -49,9 +49,9 @@ interface ModeIconProps {
 }
 
 function ModeIcon({ isRepeat, isShuffle }: ModeIconProps) {
-  if (isRepeat) return <Repeat1 className="size-7" />;
-  if (isShuffle) return <Shuffle className="size-7" />;
-  return <Repeat className="size-7" />;
+  if (isRepeat) return <Repeat1 className="size-6" strokeWidth={1.75} />;
+  if (isShuffle) return <Shuffle className="size-6" strokeWidth={1.75} />;
+  return <Repeat className="size-6" strokeWidth={1.75} />;
 }
 
 const BackgroundLayer = memo(
@@ -73,7 +73,7 @@ const BackgroundLayer = memo(
         "--bg-h": h,
         "--bg-s": `${s}%`,
         "--bg-l": `${l}%`,
-        // Flat colour field, no gradient: modernist poster look.
+        // Flat colour field, no gradient (cheap to paint).
         background: "hsl(var(--bg-h), var(--bg-s), calc(var(--bg-l) - 8%))",
       } as React.CSSProperties;
     }, [hslColor, showThemeColor]);
@@ -108,7 +108,6 @@ const BackgroundLayer = memo(
           )}
         >
           <div className="absolute inset-0 bg-black" />
-          <div className="absolute left-0 top-0 h-full w-2 bg-primary" />
         </div>
       </div>
     );
@@ -493,11 +492,11 @@ export function FullScreenPlayer({
         />
       </div>
 
-      <div className="shrink-0 flex items-center justify-between px-4 py-6 pb-[calc(2rem+var(--safe-area-bottom))] relative z-10">
+      <div className="shrink-0 flex items-center justify-between px-6 py-6 pb-[calc(2rem+var(--safe-area-bottom))] relative z-10">
         <Button
           variant="ghost"
           size="icon"
-          className="h-16 w-16 transition-colors text-white/70 hover:text-white hover:bg-white/10"
+          className="h-12 w-12 rounded-full transition-colors text-white/60 hover:text-white hover:bg-white/10"
           onClick={handleModeToggle}
           aria-label={
             isRepeat
@@ -512,35 +511,35 @@ export function FullScreenPlayer({
         <Button
           variant="ghost"
           size="icon"
-          className="h-16 w-16 text-white/70 hover:bg-white/10 hover:text-white"
+          className="h-14 w-14 rounded-full text-white hover:bg-white/10"
           onClick={handlePrev}
           aria-label="上一首"
         >
-          <SkipBack className="size-9 fill-current" />
+          <SkipBack className="size-7" strokeWidth={1.75} />
         </Button>
         <Button
           size="icon"
-          className="h-20 w-20 bg-transparent text-white/70 shadow-none hover:bg-white/10 hover:text-white active:scale-95 transition-all"
+          className="h-16 w-16 rounded-full bg-white text-black shadow-none hover:bg-white/90 active:scale-95 transition-all"
           onClick={togglePlay}
           disabled={isLoading}
           aria-label={isLoading ? "正在加载" : isPlaying ? "暂停" : "播放"}
         >
           {isLoading ? (
-            <Spinner className="size-10 text-white/70" />
+            <Spinner className="size-7 text-black" />
           ) : isPlaying ? (
-            <Pause className="size-10 fill-current" />
+            <Pause className="size-7 fill-current" strokeWidth={0} />
           ) : (
-            <Play className="size-10 fill-current ml-1" />
+            <Play className="size-7 fill-current ml-0.5" strokeWidth={0} />
           )}
         </Button>
         <Button
           variant="ghost"
           size="icon"
-          className="h-16 w-16 text-white/70 hover:bg-white/10 hover:text-white"
+          className="h-14 w-14 rounded-full text-white hover:bg-white/10"
           onClick={handleNext}
           aria-label="下一首"
         >
-          <SkipForward className="size-9 fill-current" />
+          <SkipForward className="size-7" strokeWidth={1.75} />
         </Button>
         <PlayerQueueDrawer
           queue={queue}
@@ -556,10 +555,10 @@ export function FullScreenPlayer({
             <Button
               variant="ghost"
               size="icon"
-              className="h-16 w-16 text-white/70 hover:bg-white/10 hover:text-white"
+              className="h-12 w-12 rounded-full text-white/60 hover:bg-white/10 hover:text-white"
               aria-label="播放列表"
             >
-              <ListVideo className="size-7" />
+              <ListVideo className="size-6" strokeWidth={1.75} />
             </Button>
           }
         />

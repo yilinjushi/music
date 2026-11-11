@@ -25,7 +25,7 @@
   --ring: hsl(356 100% 42%);
   --glass-bg: rgba(250, 248, 244, 0.9);
   --glass-border: rgba(0, 0, 0, 0.12);
-  --radius: 0rem;
+  --radius: 0.875rem;
   --sidebar: hsl(40 20% 97%);
   --sidebar-foreground: hsl(0 0% 6%);
   --sidebar-primary: hsl(356 100% 42%);
@@ -93,10 +93,10 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: var(--radius);
-  --radius-md: var(--radius);
+  --radius-sm: calc(var(--radius) - 6px);
+  --radius-md: calc(var(--radius) - 4px);
   --radius-lg: var(--radius);
-  --radius-xl: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -323,24 +323,12 @@
 }
 
 /* ------------------------------------------------------------------
- * Modernist system: hard edges, flat planes, no depth effects.
- * Square corners everywhere, no drop shadows or glass blur. Focus rings
- * are separate (ring/outline) and remain visible.
+ * Soft system: rounded corners and calm surfaces. Glass blur stays off
+ * because it keeps the GPU busy during playback.
  * ------------------------------------------------------------------ */
-@theme {
-  --shadow-2xs: 0 0 #0000;
-  --shadow-xs: 0 0 #0000;
-  --shadow-sm: 0 0 #0000;
-  --shadow-md: 0 0 #0000;
-  --shadow-lg: 0 0 #0000;
-  --shadow-xl: 0 0 #0000;
-  --shadow-2xl: 0 0 #0000;
-}
-
 *,
 *::before,
 *::after {
-  border-radius: 0 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -348,6 +336,6 @@
 h1,
 h2,
 h3 {
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }

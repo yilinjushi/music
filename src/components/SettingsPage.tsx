@@ -23,7 +23,7 @@ function SettingsSection({
 }) {
   return (
     <div className="mb-6">
-      <h2 className="border-b-2 border-foreground pb-1 text-xs font-extrabold tracking-[0.2em] text-primary">
+      <h2 className="px-1 pb-1 text-sm font-semibold text-muted-foreground">
         {title}
       </h2>
       <div>{children}</div>

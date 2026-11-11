@@ -46,8 +46,7 @@ export function MusicTabBar() {
             )}
             aria-label={tab.label}
           >
-            <Icon className="h-6 w-6" strokeWidth={isActive ? 2.5 : 2} />
-            <span className="text-[11px] leading-none">{tab.label}</span>
+            <Icon className="h-7 w-7" strokeWidth={isActive ? 2.5 : 2} />
           </Link>
         );
       })}
