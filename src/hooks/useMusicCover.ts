@@ -1,4 +1,7 @@
 import { logger } from "@/lib/logger";
+import { getStoredCoverUrl, storeCover } from "@/lib/cover-cache";
+import { canUseNetwork } from "@/lib/network-policy";
+import { forceHttps } from "@shared/utils/url";
 import type { MusicTrack } from "@/types/music";
 import { useState, useEffect } from "react";
 
@@ -27,7 +30,20 @@ export function useMusicCover(
     const fetchCover = async () => {
       try {
         const { musicApi } = await import("@/lib/music-api");
+        // Cellular / "local only": never ask the network for a cover. Only a
+        // direct image link can be looked up on the phone without a request.
+        if (!canUseNetwork()) {
+          const stored = pic_id.startsWith("http")
+            ? await getStoredCoverUrl(forceHttps(pic_id))
+            : null;
+          if (active) setState({ url: stored, picId: pic_id, source });
+          return;
+        }
         const url = await musicApi.getPic(pic_id, source);
+        // Keep a copy on the phone for later playback without network.
+        if (url?.startsWith("http") && pic_id.startsWith("http")) {
+          void storeCover(forceHttps(pic_id));
+        }
         if (active) {
           setState({ url, picId: pic_id, source });
         }

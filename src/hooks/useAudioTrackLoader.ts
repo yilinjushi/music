@@ -6,6 +6,7 @@ import { useUrlCacheStore, buildUrlCacheKey } from "@/store/url-cache-store";
 import type { MusicSource } from "@/types/music";
 import toast from "react-hot-toast";
 import { logger } from "@/lib/logger";
+import { canUseNetwork, isLocalOnly } from "@/lib/network-policy";
 import {
   isSameTrackIdentity,
   normalizeTrackUrlId,
@@ -41,7 +42,7 @@ async function isTrackPlayable(
   track: { source: MusicSource; id: string } | null
 ): Promise<boolean> {
   if (!track) return false;
-  if (track.source === "local" || navigator.onLine) return true;
+  if (track.source === "local" || canUseNetwork()) return true;
   const { hasOfflineAudio } = await import("@/lib/offline-audio");
   return hasOfflineAudio(track);
 }
@@ -289,7 +290,7 @@ export function useAudioTrackLoader(
       // Offline, a remembered network URL is useless: let the resolver pick
       // the copy stored on the phone instead.
       const cachedPrimaryUrl =
-        !isRecovery && navigator.onLine
+        !isRecovery && canUseNetwork()
           ? useUrlCacheStore.getState().get(trackKey)
           : undefined;
       if (!qualityChanged) audio.pause();
@@ -312,7 +313,7 @@ export function useAudioTrackLoader(
         const canTryProxy =
           getState().enableProxyFallback &&
           source !== "local" &&
-          navigator.onLine &&
+          canUseNetwork() &&
           !isProxyUrl(audioUrl) &&
           !isSameOriginOpaqueAudioUrl(audioUrl) &&
           fallbackStageRef.current.stage === "none";
@@ -433,7 +434,7 @@ export function useAudioTrackLoader(
         // 代理备用线路容灾时，直接使用已缓存的远程 URL
         if (
           remoteUrlRef.current &&
-          (navigator.onLine || remoteUrlRef.current.startsWith("blob:"))
+          (canUseNetwork() || remoteUrlRef.current.startsWith("blob:"))
         )
           return { url: remoteUrlRef.current };
 
@@ -463,13 +464,16 @@ export function useAudioTrackLoader(
         assertActive();
 
         // 离线无资源容灾跳过
-        if (!primaryUrl && !navigator.onLine && source !== "local") {
+        if (!primaryUrl && !canUseNetwork() && source !== "local") {
           const state = getState();
           const nextIdx = await findNextPlayableTrack(
             state.queue,
             state.currentIndex + 1
           );
           assertActive();
+          if (isLocalOnly() && navigator.onLine) {
+            toast("仅本机模式：这首歌没存到手机", { id: "local-only-skip" });
+          }
           if (nextIdx !== null && nextIdx !== state.currentIndex) {
             state.setCurrentIndexAndPlay(nextIdx);
           } else {
@@ -496,7 +500,7 @@ export function useAudioTrackLoader(
             source !== "local" &&
             fallbackStageRef.current.stage === "none" &&
             remoteUrlRef.current &&
-            navigator.onLine &&
+            canUseNetwork() &&
             !isProxyUrl(remoteUrlRef.current) &&
             !isSameOriginOpaqueAudioUrl(remoteUrlRef.current)
           ) {

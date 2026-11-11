@@ -1,5 +1,6 @@
 import { musicApi } from "@/lib/music-api";
 import { getOfflineAudioUrl } from "@/lib/offline-audio";
+import { canUseNetwork } from "@/lib/network-policy";
 import { normalizeAudioUrlForPlayback } from "@/lib/utils/audio-url";
 import { useUrlCacheStore, buildUrlCacheKey } from "@/store/url-cache-store";
 import type { MusicTrack } from "@/types/music";
@@ -44,7 +45,7 @@ async function resolveRemoteAudioUrl(
   quality: number,
   signal?: AbortSignal
 ): Promise<string> {
-  const maxRetries = navigator.onLine ? 2 : 0;
+  const maxRetries = canUseNetwork() ? 2 : 0;
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
@@ -92,13 +93,15 @@ export async function resolveTrackUrl(
   if (offlineUrl) return { url: offlineUrl };
 
   // 内存缓存
-  const memCached = useUrlCacheStore.getState().get(trackKey);
+  const memCached = canUseNetwork()
+    ? useUrlCacheStore.getState().get(trackKey)
+    : undefined;
   if (memCached) {
     return { url: normalizeAudioUrlForPlayback(memCached) };
   }
 
-  // 离线无资源
-  if (!navigator.onLine) return { url: "" };
+  // 离线或仅本机模式：不联网
+  if (!canUseNetwork()) return { url: "" };
 
   // 远端请求
   const remoteUrl = await resolveRemoteAudioUrl(track, quality, signal);

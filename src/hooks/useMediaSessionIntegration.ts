@@ -11,6 +11,8 @@ export function sanitizeMediaSessionArtworkUrl(
 
   const trimmed = rawUrl.trim();
   if (!trimmed) return null;
+  // A cover stored on the phone (see cover-cache) is safe by construction.
+  if (trimmed.startsWith("blob:")) return trimmed;
 
   const normalized = forceHttps(trimmed);
 

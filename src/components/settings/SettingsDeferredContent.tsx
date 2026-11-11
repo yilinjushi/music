@@ -34,6 +34,7 @@ import { NeteaseLogin } from "./NeteaseLogin";
 import { PlaybackSpeedSetting } from "./PlaybackSpeedSetting";
 import { QualitySelect } from "./QualitySelect";
 import { SettingItem } from "./SettingItem";
+import { setManualLocalOnly, useManualLocalOnly } from "@/lib/network-policy";
 import { SleepTimerSetting } from "./SleepTimerSetting";
 
 const DataBackup = lazy(() =>
@@ -62,6 +63,7 @@ function SettingsSection({
 export function DeferredSettingsContent() {
   const navigate = useNavigate();
   const [dataBackupOpen, setDataBackupOpen] = useState(false);
+  const localOnly = useManualLocalOnly();
   const {
     volume,
     setVolume,
@@ -196,6 +198,18 @@ export function DeferredSettingsContent() {
 
       <SettingsSection title="高级设置">
         <ApiUrlConfig />
+        <SettingItem
+          icon={Shield}
+          title="仅本机模式"
+          subtitle="不联网，只播手机里已存的歌（出门用流量时打开，省电不发热）"
+          action={
+            <Switch
+              aria-label="仅本机模式"
+              checked={localOnly}
+              onCheckedChange={setManualLocalOnly}
+            />
+          }
+        />
         <SettingItem
           icon={Shield}
           title="代理回退"

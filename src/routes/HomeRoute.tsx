@@ -9,6 +9,7 @@ import { useNeteaseStore } from "@/store/netease-store";
 import { usePlayHelper } from "@/hooks/usePlayHelper";
 import { useMusicStore } from "@/store/music-store";
 import { getOptionalTrackIdentityKey } from "@/lib/utils/track-identity";
+import { canUseNetwork } from "@/lib/network-policy";
 import {
   getUnavailableTrackIds,
   requestNeteasePlaylistSync,
@@ -97,6 +98,8 @@ export function HomeRoute() {
         hiddenAt = Date.now();
       } else if (hiddenAt && Date.now() - hiddenAt > HOME_REFRESH_AFTER_MS) {
         hiddenAt = 0;
+        // 蜂窝网络 / 仅本机模式下不联网刷新。
+        if (!canUseNetwork()) return;
         setRefreshKey((key) => key + 1);
       }
     };
@@ -114,11 +117,11 @@ export function HomeRoute() {
     if (sessionState !== "authenticated") return;
     const controller = new AbortController();
     // Let the list load first so background work never competes with it.
-    const syncTimer = window.setTimeout(
-      () => requestNeteasePlaylistSync(HOME_PLAYLIST_ID),
-      HOME_SYNC_DELAY_MS
-    );
+    const syncTimer = window.setTimeout(() => {
+      if (canUseNetwork()) requestNeteasePlaylistSync(HOME_PLAYLIST_ID);
+    }, HOME_SYNC_DELAY_MS);
     const hideTimer = window.setTimeout(() => {
+      if (!canUseNetwork()) return;
       void getUnavailableTrackIds(HOME_PLAYLIST_ID, controller.signal).then(
         (ids) => {
           if (!controller.signal.aborted) setHiddenTrackIds(new Set(ids));

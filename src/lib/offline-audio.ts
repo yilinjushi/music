@@ -1,4 +1,5 @@
 import type { MusicTrack } from "@/types/music";
+import { canUseNetwork } from "@/lib/network-policy";
 
 /**
  * Offline copies of the owner's cached 红心 songs, kept in Cache Storage on
@@ -149,7 +150,8 @@ async function runSync(
   report(missing.length > 0);
 
   for (const path of missing) {
-    if (!navigator.onLine) break;
+    // Offline, cellular or "local only": no downloads.
+    if (!canUseNetwork()) break;
     // Never download in the background: radio + disk writes heat the phone.
     if (document.visibilityState === "hidden") break;
     try {

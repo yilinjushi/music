@@ -64,6 +64,7 @@ import {
   type OfflineSyncProgress,
 } from "@/lib/offline-audio";
 import { readHomeList, writeHomeList } from "@/lib/home-list-cache";
+import { canUseNetwork } from "@/lib/network-policy";
 
 const LOAD_MORE_RETRY_DELAYS_MS = [1_500, 4_000];
 
@@ -238,7 +239,7 @@ export function NeteaseDetail({
     let cancelled = false;
     let timer = 0;
     const poll = async () => {
-      if (document.hidden) return;
+      if (document.hidden || !canUseNetwork()) return;
       const next = await getPlaylistCacheStatus(id);
       if (cancelled || !next) return;
       setCacheStatus(next);
@@ -276,6 +277,11 @@ export function NeteaseDetail({
           void run(round);
         };
         document.addEventListener("visibilitychange", waitingForVisible);
+        return;
+      }
+      // Cellular / "local only": no sync; look again later without using a round.
+      if (!canUseNetwork()) {
+        timers.push(window.setTimeout(() => void run(round), 90_000));
         return;
       }
       requestNeteasePlaylistSync(id);
