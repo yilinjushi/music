@@ -10,5 +10,11 @@
     "advisory": "GHSA-ch52-4w7c-c8xp",
     "reason": "Dev-only: reached via @cyclonedx/cyclonedx-npm > libxmljs2 > node-gyp > make-fetch-happen for SBOM generation in CI. No shared multi-user HTTP cache is involved and no patched release exists. Approved by owner 2026-10-03.",
     "reviewBy": "2026-12-31"
+  },
+  {
+    "package": "deepmerge",
+    "advisory": "GHSA-gcqx-w48m-w2h4",
+    "reason": "Dev-only and low severity: reached via vite-plugin-pwa > workbox-build > @rollup/plugin-node-resolve while building the service worker. It only merges the project's own build configuration, never untrusted input, and is not shipped to users. No patched release exists. Approved by owner 2026-11-11.",
+    "reviewBy": "2026-12-31"
   }
 ]
