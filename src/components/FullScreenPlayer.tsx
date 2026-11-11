@@ -18,22 +18,11 @@ import {
   SkipForward,
   Play,
   Pause,
-  SquareArrowOutUpRight,
-  ClockFading,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import { useMounted } from "@/hooks/use-mounted";
 import { usePlayerActions } from "@/hooks/usePlayerActions";
-import { usePlayerUIState } from "@/hooks/usePlayerUIState";
 import { PlayerQueueDrawer } from "./PlayerQueueDrawer";
-import { MusicTrackMobileMenu } from "./MusicTrackMobileMenu";
-import { AddToPlaylistDrawer } from "./AddToPlaylistDrawer";
-import { QualityDrawer } from "./settings/QualityDrawer";
-import { PlaybackSpeedDrawer } from "./settings/PlaybackSpeedDrawer";
-import { SleepTimerDrawer } from "./settings/SleepTimerDrawer";
-import { downloadMusicTrack } from "@/lib/utils/download";
-import { getQualityShortLabel } from "@/lib/utils/quality";
-import { formatTime } from "@/lib/utils/time";
 import {
   useMusicStore,
   type FullScreenBackgroundMode,
@@ -147,31 +136,13 @@ export function FullScreenPlayer({
     }
   }, [isFullScreen]);
   const {
-    moreDrawerOpen,
-    setMoreDrawerOpen,
-    isAddToPlaylistOpen,
-    setIsAddToPlaylistOpen,
-    qualityDrawerOpen,
-    setQualityDrawerOpen,
-    speedDrawerOpen,
-    setSpeedDrawerOpen,
-    sleepDrawerOpen,
-    setSleepDrawerOpen,
-  } = usePlayerUIState(isFullScreen);
-
-  const {
     queue,
-    quality,
     currentIndex,
     setCurrentIndexAndPlay,
     clearQueue,
     reshuffle,
     removeFromQueue,
-    playTrackAsNext,
     fullScreenBackgroundMode,
-    playbackSpeed,
-    sleepTimerIsActive,
-    sleepTimerRemaining,
     isPlaying,
     isLoading,
     isRepeat,
@@ -188,12 +159,7 @@ export function FullScreenPlayer({
       clearQueue: state.clearQueue,
       reshuffle: state.reshuffle,
       removeFromQueue: state.removeFromQueue,
-      playTrackAsNext: state.playTrackAsNext,
-      quality: state.quality,
       fullScreenBackgroundMode: state.fullScreenBackgroundMode,
-      playbackSpeed: state.playbackSpeed,
-      sleepTimerIsActive: state.sleepTimerIsActive,
-      sleepTimerRemaining: state.sleepTimerRemaining,
       isPlaying: state.isPlaying,
       isLoading: state.isLoading,
       isRepeat: state.isRepeat,
@@ -208,7 +174,6 @@ export function FullScreenPlayer({
   const currentTrack = queue[currentIndex] || null;
 
   const {
-    handleShare,
     handleToggleLike,
     copyTrackInfo,
     isCurrentTrackFavorite,
@@ -340,35 +305,17 @@ export function FullScreenPlayer({
         mode={fullScreenBackgroundMode}
       />
 
-      <header className="shrink-0 flex items-center justify-between px-6 pt-[calc(1rem+var(--safe-area-top))] pb-6 relative z-10">
+      <header className="shrink-0 flex items-center justify-between px-4 pt-[calc(0.5rem+var(--safe-area-top))] pb-2 relative z-10">
         <Button
           variant="ghost"
           size="icon"
-          className="h-16 w-16 text-white/60 hover:bg-white/10 hover:text-white"
+          className="h-12 w-12 rounded-full text-white/60 hover:bg-white/10 hover:text-white"
           onClick={() => {
             onClose();
           }}
           aria-label="收起全屏播放器"
         >
-          <ChevronDown className="size-8" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-xs tracking-widest text-white/60 hover:text-white hover:bg-white/10 h-12 px-4"
-          onClick={() => setQualityDrawerOpen(true)}
-          aria-label={`选择播放音质，当前 ${getQualityShortLabel(quality)}`}
-        >
-          {getQualityShortLabel(quality)}
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-16 w-16 text-white/60 hover:bg-white/10 hover:text-white"
-          onClick={handleShare}
-          aria-label="分享当前歌曲"
-        >
-          <SquareArrowOutUpRight className="size-7" />
+          <ChevronDown className="size-7" strokeWidth={1.75} />
         </Button>
       </header>
 
@@ -376,7 +323,7 @@ export function FullScreenPlayer({
       <div className="flex-1 flex flex-col items-center justify-center px-2 relative z-10 overflow-hidden">
         <div
           className={cn(
-            "relative aspect-square w-72 max-w-[320px] overflow-hidden rounded-3xl transition-transform duration-500 ring-1 ring-white/5",
+            "relative aspect-square w-80 max-w-[80vw] overflow-hidden rounded-3xl transition-transform duration-500 ring-1 ring-white/5",
             isPlaying ? "scale-100" : "scale-[0.95]"
           )}
         >
@@ -409,7 +356,7 @@ export function FullScreenPlayer({
             aria-label="复制当前歌曲信息"
             title="长按复制歌曲信息"
           >
-            <h2 className="truncate text-xl font-semibold text-white">
+            <h2 className="truncate text-2xl font-semibold text-white">
               {currentTrack?.name || "未知歌曲"}
             </h2>
             <p className="truncate text-sm text-white/60 mt-1">
@@ -420,7 +367,7 @@ export function FullScreenPlayer({
             <Button
               variant="ghost"
               size="icon"
-              className="h-14 w-14 text-white/70 hover:bg-white/10 hover:text-white"
+              className="h-12 w-12 rounded-full text-white/70 hover:bg-white/10 hover:text-white"
               onClick={(e) => {
                 e.stopPropagation();
                 handleToggleLike();
@@ -430,66 +377,19 @@ export function FullScreenPlayer({
               }
             >
               <Heart
+                strokeWidth={1.75}
                 className={cn(
-                  "size-8 transition-all",
+                  "size-7 transition-all",
                   isCurrentTrackFavorite && "fill-primary text-primary"
                 )}
               />
             </Button>
-            {currentTrack && (
-              <>
-                <MusicTrackMobileMenu
-                  track={currentTrack}
-                  open={moreDrawerOpen}
-                  onOpenChange={setMoreDrawerOpen}
-                  onAddToPlaylist={() => {
-                    setIsAddToPlaylistOpen(true);
-                  }}
-                  onDownload={() => {
-                    downloadMusicTrack(currentTrack, parseInt(quality));
-                  }}
-                  isFavorite={isCurrentTrackFavorite}
-                  onToggleLike={() => {
-                    handleToggleLike();
-                  }}
-                  triggerClassName="h-14 w-14 text-white/70 hover:bg-white/10 hover:text-white [&_svg]:size-8!"
-                  onNavigate={() => {
-                    onClose();
-                  }}
-                />
-                <AddToPlaylistDrawer
-                  open={isAddToPlaylistOpen}
-                  onOpenChange={setIsAddToPlaylistOpen}
-                  track={currentTrack}
-                />
-              </>
-            )}
           </div>
         </div>
       </div>
 
       <div className="shrink-0 px-8 relative z-10">
-        <PlayerProgressBar
-          className="relative"
-          leftTimeSuffix={
-            playbackSpeed !== 1.0 ? (
-              <span className="ml-1 text-[0.7em] align-sub opacity-70">
-                x{playbackSpeed.toFixed(1)}
-              </span>
-            ) : null
-          }
-          centerContent={
-            sleepTimerIsActive ? (
-              <span className="flex items-center gap-1 text-[0.85em]">
-                <ClockFading className="w-2.5 h-2.5" />
-                {formatTime(sleepTimerRemaining)}
-              </span>
-            ) : null
-          }
-          onLeftTimeClick={() => setSpeedDrawerOpen(true)}
-          onRightTimeClick={() => setSleepDrawerOpen(true)}
-          onCenterClick={() => setSleepDrawerOpen(true)}
-        />
+        <PlayerProgressBar className="relative" />
       </div>
 
       <div className="shrink-0 flex items-center justify-between px-6 py-6 pb-[calc(2rem+var(--safe-area-bottom))] relative z-10">
@@ -550,7 +450,6 @@ export function FullScreenPlayer({
           onClear={handleClearQueue}
           onReshuffle={reshuffle}
           onRemove={handleRemoveFromQueue}
-          onPlayTrack={playTrackAsNext}
           trigger={
             <Button
               variant="ghost"
@@ -563,19 +462,6 @@ export function FullScreenPlayer({
           }
         />
       </div>
-
-      <QualityDrawer
-        open={qualityDrawerOpen}
-        onOpenChange={setQualityDrawerOpen}
-      />
-      <PlaybackSpeedDrawer
-        open={speedDrawerOpen}
-        onOpenChange={setSpeedDrawerOpen}
-      />
-      <SleepTimerDrawer
-        open={sleepDrawerOpen}
-        onOpenChange={setSleepDrawerOpen}
-      />
     </div>,
     document.body
   );

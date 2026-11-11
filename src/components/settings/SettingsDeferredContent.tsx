@@ -2,6 +2,7 @@ import { Palette, WifiOff } from "lucide-react";
 import { ThemeToggle } from "../ThemeToggle";
 import { Switch } from "../ui/switch";
 import { AutoMatchSetting } from "./AutoMatchSetting";
+import { IssueLogs } from "./IssueLogs";
 import { NeteaseLogin } from "./NeteaseLogin";
 import { QualitySelect } from "./QualitySelect";
 import { SettingItem } from "./SettingItem";
@@ -40,6 +41,10 @@ export function DeferredSettingsContent() {
       <SettingsCard>
         <SettingItem icon={Palette} title="主题切换" action={<ThemeToggle />} />
         <NeteaseLogin />
+      </SettingsCard>
+
+      <SettingsCard>
+        <IssueLogs />
       </SettingsCard>
     </>
   );
