@@ -21,8 +21,16 @@ describe("network policy", () => {
     expect(localStorage.getItem("music_local_only")).toBe("1");
     expect(canUseNetwork()).toBe(false);
     setManualLocalOnly(false);
-    expect(localStorage.getItem("music_local_only")).toBeNull();
+    expect(localStorage.getItem("music_local_only")).toBe("0");
     expect(canUseNetwork()).toBe(true);
+  });
+
+  it("defaults to offline mode until online is chosen", async () => {
+    localStorage.removeItem("music_local_only");
+    vi.resetModules();
+    const fresh = await import("@/lib/network-policy");
+    expect(fresh.isLocalOnly()).toBe(true);
+    expect(fresh.canUseNetwork()).toBe(false);
   });
 
   it("blocks the network while offline", () => {

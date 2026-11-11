@@ -12,9 +12,10 @@ const listeners = new Set<() => void>();
 
 function readManualLocalOnly(): boolean {
   try {
-    return localStorage.getItem(LOCAL_ONLY_KEY) === "1";
+    // Offline is the default; only an explicit "online" choice lifts it.
+    return localStorage.getItem(LOCAL_ONLY_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -27,8 +28,8 @@ export function getManualLocalOnly(): boolean {
 export function setManualLocalOnly(enabled: boolean): void {
   manualLocalOnly = enabled;
   try {
-    if (enabled) localStorage.setItem(LOCAL_ONLY_KEY, "1");
-    else localStorage.removeItem(LOCAL_ONLY_KEY);
+    // The choice is kept until the owner changes it again.
+    localStorage.setItem(LOCAL_ONLY_KEY, enabled ? "1" : "0");
   } catch {
     // Storage unavailable: the choice still holds for this session.
   }
@@ -42,7 +43,7 @@ export function useManualLocalOnly(): boolean {
       return () => listeners.delete(listener);
     },
     getManualLocalOnly,
-    () => false
+    () => true
   );
 }
 

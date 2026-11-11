@@ -32,6 +32,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/skeletons/DetailSkeleton";
 import toast from "react-hot-toast";
+import { cn } from "@/lib/utils";
 import { writeClipboardText } from "@/lib/clipboard";
 import {
   DropdownMenu,
@@ -695,29 +696,40 @@ export function NeteaseDetail({
             <Search className="h-6 w-6" />
           )}
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-11 w-9 text-foreground"
+        <button
+          type="button"
+          role="switch"
+          aria-checked={!offlineMode}
+          aria-label={
+            offlineMode
+              ? "当前离线，点击切换到在线"
+              : "当前在线，点击切换到离线"
+          }
+          className={cn(
+            "flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors",
+            offlineMode
+              ? "border-border bg-muted text-muted-foreground"
+              : "border-primary bg-primary text-primary-foreground"
+          )}
           onClick={() => {
             const goOffline = !offlineMode;
             setManualLocalOnly(goOffline);
             if (goOffline) {
-              toast("离线模式：只播手机里的歌，不联网", { id: "mode" });
+              toast("离线：只播手机里的歌，不联网", { id: "mode" });
             } else {
-              toast("在线模式：联网并自动下载新歌和封面", { id: "mode" });
+              toast("在线：联网并自动下载新歌和封面", { id: "mode" });
               retry();
               setManualSync((count) => count + 1);
             }
           }}
-          aria-label={offlineMode ? "切换到在线模式" : "切换到离线模式"}
         >
           {offlineMode ? (
-            <WifiOff className="h-5 w-5 text-muted-foreground" />
+            <WifiOff className="h-3.5 w-3.5" />
           ) : (
-            <Wifi className="h-5 w-5" />
+            <Wifi className="h-3.5 w-3.5" />
           )}
-        </Button>
+          {offlineMode ? "离线" : "在线"}
+        </button>
         {action}
       </>
     );

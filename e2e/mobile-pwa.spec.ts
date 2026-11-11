@@ -157,6 +157,12 @@ function allowConsoleErrors(page: Page, ...patterns: RegExp[]) {
 }
 
 test.beforeEach(async ({ page }) => {
+  // The app defaults to offline mode; run the suite in online mode.
+  await page.addInitScript(() => {
+    if (localStorage.getItem("music_local_only") === null) {
+      localStorage.setItem("music_local_only", "0");
+    }
+  });
   monitorPageHealth(page);
 });
 
@@ -226,6 +232,8 @@ async function seedBrowserState(
   await page.addInitScript(
     ({ musicState, sessionState }) => {
       localStorage.clear();
+      // The app defaults to offline mode; these tests exercise online playback.
+      localStorage.setItem("music_local_only", "0");
       localStorage.setItem("oh_music_store", musicState);
       localStorage.setItem("oh_netease_store", sessionState);
     },
