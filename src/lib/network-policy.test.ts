@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  allowNetworkTemporarily,
   canUseNetwork,
   isLocalOnly,
   setManualLocalOnly,
@@ -16,6 +17,8 @@ describe("network policy", () => {
   afterEach(() => {
     setManualLocalOnly(false);
     setConnection(undefined);
+    allowNetworkTemporarily(0);
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -46,6 +49,15 @@ describe("network policy", () => {
 
   it("blocks the network while offline", () => {
     vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    expect(canUseNetwork()).toBe(false);
+  });
+
+  it("lifts the restriction for a manual refresh, then restores it", () => {
+    vi.useFakeTimers();
+    setConnection("cellular");
+    allowNetworkTemporarily(60_000);
+    expect(canUseNetwork()).toBe(true);
+    vi.advanceTimersByTime(60_001);
     expect(canUseNetwork()).toBe(false);
   });
 });

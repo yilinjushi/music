@@ -26,6 +26,7 @@ import {
   Download,
   Search,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/skeletons/DetailSkeleton";
@@ -64,7 +65,7 @@ import {
   type OfflineSyncProgress,
 } from "@/lib/offline-audio";
 import { readHomeList, writeHomeList } from "@/lib/home-list-cache";
-import { canUseNetwork } from "@/lib/network-policy";
+import { allowNetworkTemporarily, canUseNetwork } from "@/lib/network-policy";
 
 const LOAD_MORE_RETRY_DELAYS_MS = [1_500, 4_000];
 
@@ -99,6 +100,7 @@ interface UnifiedDetail {
 }
 
 const NETEASE_PLAYLIST_PAGE_SIZE = 100;
+const MANUAL_REFRESH_NETWORK_MS = 10 * 60_000;
 
 export function NeteaseDetail({
   id,
@@ -260,6 +262,8 @@ export function NeteaseDetail({
   // newly liked songs, then mirror every cached song onto the phone.
   const [offline, setOffline] = useState<OfflineSyncProgress | null>(null);
   const [offlineBytes, setOfflineBytes] = useState<number | null>(null);
+  // Bumped by the manual "update 红心" button to restart the sync at once.
+  const [manualSync, setManualSync] = useState(0);
   useEffect(() => {
     if (!compact || !id || type !== "playlist" || !authenticated) return;
     let cancelled = false;
@@ -298,14 +302,14 @@ export function NeteaseDetail({
       }
     };
     // Let the last song resume and the list render before any downloads.
-    timers.push(window.setTimeout(() => void run(0), 10_000));
+    timers.push(window.setTimeout(() => void run(0), manualSync ? 0 : 10_000));
     return () => {
       cancelled = true;
       timers.forEach((timer) => window.clearTimeout(timer));
       if (waitingForVisible)
         document.removeEventListener("visibilitychange", waitingForVisible);
     };
-  }, [compact, id, type, authenticated]);
+  }, [compact, id, type, authenticated, manualSync]);
 
   const onHeaderBack = () => {
     handleBack(onBack);
@@ -674,6 +678,25 @@ export function NeteaseDetail({
           ) : (
             <Search className="h-6 w-6" />
           )}
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-11 w-9 text-foreground"
+          onClick={() => {
+            if (!navigator.onLine) {
+              toast.error("当前没有网络");
+              return;
+            }
+            // Explicit request: allowed even on cellular / in local-only mode.
+            allowNetworkTemporarily(MANUAL_REFRESH_NETWORK_MS);
+            retry();
+            setManualSync((count) => count + 1);
+            toast("正在更新红心（临时联网 10 分钟）", { id: "manual-refresh" });
+          }}
+          aria-label="更新红心"
+        >
+          <RefreshCw className="h-5 w-5" />
         </Button>
         {action}
       </>

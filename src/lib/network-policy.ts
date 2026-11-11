@@ -56,8 +56,19 @@ export function isCellularConnection(): boolean {
   return connection?.type === "cellular";
 }
 
+let networkAllowedUntil = 0;
+
+/**
+ * The owner explicitly asked for a refresh (e.g. "update 红心" on cellular):
+ * lift the restriction for a short while, then fall back automatically.
+ */
+export function allowNetworkTemporarily(durationMs: number): void {
+  networkAllowedUntil = Date.now() + durationMs;
+}
+
 /** Only songs stored on the phone may play; no network work at all. */
 export function isLocalOnly(): boolean {
+  if (Date.now() < networkAllowedUntil) return false;
   return manualLocalOnly || isCellularConnection();
 }
 
