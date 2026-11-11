@@ -89,8 +89,8 @@ export function MusicNowPlayingBar({
         className={cn(
           "flex items-center transition-all duration-300",
           isTab
-            ? "gap-2 px-3 py-1.5 bg-card border-t-2 border-primary"
-            : "gap-3 px-4 py-2.5 bg-card border-t-2 border-primary pb-[calc(0.75rem+var(--safe-area-bottom))]"
+            ? "gap-2 px-3 py-1.5 bg-card border-t border-border"
+            : "gap-3 px-4 py-2.5 bg-card border-t border-border pb-[calc(0.75rem+var(--safe-area-bottom))]"
         )}
       >
         {/* 不含列表按钮，避免遮罩层关闭时 ghost click 误触发全屏 */}

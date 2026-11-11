@@ -62,7 +62,7 @@ import {
   type PlaylistCacheStatus,
 } from "@/lib/audio-cache";
 import {
-  getOfflineUsage,
+  countOfflineAudio,
   syncOfflineAudio,
   type OfflineSyncProgress,
 } from "@/lib/offline-audio";
@@ -268,12 +268,23 @@ export function NeteaseDetail({
   // Home (红心) only: after the app has settled, ask the server to pick up
   // newly liked songs, then mirror every cached song onto the phone.
   const [offline, setOffline] = useState<OfflineSyncProgress | null>(null);
-  const [offlineBytes, setOfflineBytes] = useState<number | null>(null);
   const offlineMode = useManualLocalOnly();
   // Bumped when the owner switches back to online, to sync at once.
   const [manualSync, setManualSync] = useState(0);
   const tracksRef = useRef(tracks);
   tracksRef.current = tracks;
+  // Songs already on the phone, known without any network (offline mode).
+  const [storedCount, setStoredCount] = useState<number | null>(null);
+  useEffect(() => {
+    if (!compact) return;
+    let cancelled = false;
+    void countOfflineAudio().then((count) => {
+      if (!cancelled) setStoredCount(count);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [compact, offlineMode]);
   useEffect(() => {
     if (!compact || !id || type !== "playlist" || !authenticated) return;
     let cancelled = false;
@@ -301,8 +312,6 @@ export function NeteaseDetail({
       await syncOfflineAudio(ids, (progress) => {
         if (!cancelled) setOffline(progress);
       });
-      const usage = await getOfflineUsage();
-      if (!cancelled && usage) setOfflineBytes(usage.usedBytes);
       // Then the covers of the listed songs, also only what is missing.
       await storeCovers(
         tracksRef.current
@@ -643,17 +652,13 @@ export function NeteaseDetail({
     const total = detail.trackCount;
     const cached = cacheStatus?.ready ?? 0;
     const unavailableCount = cacheStatus?.unavailable.length ?? 0;
-    const cloudStatusText = [
-      cached >= total - unavailableCount
-        ? "云端已全部缓存"
-        : `云端已缓存 ${cached}/${total}`,
-      `无音源 ${unavailableCount} 首`,
-      offline
-        ? `手机已存 ${offline.stored}/${offline.total}${
-            offline.running ? "（下载中）" : ""
-          }${
-            offlineBytes ? ` · ${(offlineBytes / 1024 ** 3).toFixed(1)} GB` : ""
-          }`
+    const storedOnPhone = offline?.stored ?? storedCount;
+    const statusText = [
+      `${total} 首`,
+      storedOnPhone !== null ? `手机已存 ${storedOnPhone}` : null,
+      offline?.running ? "下载中" : null,
+      !offlineMode && cacheStatus && cached < total - unavailableCount
+        ? `云端 ${cached}/${total}`
         : null,
     ]
       .filter(Boolean)
@@ -669,11 +674,9 @@ export function NeteaseDetail({
     ) : (
       <div className="flex min-w-0 items-center gap-3">
         <div className="flex min-w-0 flex-col leading-tight">
-          <span className="text-xl font-bold tabular-nums text-foreground">
-            {cached}/{total}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {cloudStatusText}
+          <span className="text-xl font-bold text-foreground">红心</span>
+          <span className="truncate text-xs tabular-nums text-muted-foreground">
+            {statusText}
           </span>
         </div>
       </div>
@@ -705,12 +708,7 @@ export function NeteaseDetail({
               ? "当前离线，点击切换到在线"
               : "当前在线，点击切换到离线"
           }
-          className={cn(
-            "flex h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors",
-            offlineMode
-              ? "border-border bg-muted text-muted-foreground"
-              : "border-primary bg-primary text-primary-foreground"
-          )}
+          className="flex h-11 shrink-0 items-center px-1"
           onClick={() => {
             const goOffline = !offlineMode;
             setManualLocalOnly(goOffline);
@@ -723,12 +721,21 @@ export function NeteaseDetail({
             }
           }}
         >
-          {offlineMode ? (
-            <WifiOff className="h-3.5 w-3.5" />
-          ) : (
-            <Wifi className="h-3.5 w-3.5" />
-          )}
-          {offlineMode ? "离线" : "在线"}
+          <span
+            className={cn(
+              "flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors",
+              offlineMode
+                ? "border-border bg-muted text-muted-foreground"
+                : "border-primary bg-primary text-primary-foreground"
+            )}
+          >
+            {offlineMode ? (
+              <WifiOff className="h-3.5 w-3.5" />
+            ) : (
+              <Wifi className="h-3.5 w-3.5" />
+            )}
+            {offlineMode ? "离线" : "在线"}
+          </span>
         </button>
         {action}
       </>

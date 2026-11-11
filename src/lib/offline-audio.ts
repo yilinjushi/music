@@ -78,6 +78,17 @@ export async function hasOfflineAudio(
   }
 }
 
+/** How many songs are stored on this phone (no network needed). */
+export async function countOfflineAudio(): Promise<number | null> {
+  if (!isOfflineCapable()) return null;
+  try {
+    const cache = await caches.open(OFFLINE_CACHE);
+    return (await cache.keys()).length;
+  } catch {
+    return null;
+  }
+}
+
 export interface OfflineSyncProgress {
   /** songs that should be on the phone */
   total: number;
