@@ -100,7 +100,7 @@ export async function resolveTrackUrl(
     return { url: normalizeAudioUrlForPlayback(memCached) };
   }
 
-  // 离线或仅本机模式：不联网
+  // 无网络或离线模式：不联网
   if (!canUseNetwork()) return { url: "" };
 
   // 远端请求

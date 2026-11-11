@@ -30,7 +30,7 @@ export function useMusicCover(
     const fetchCover = async () => {
       try {
         const { musicApi } = await import("@/lib/music-api");
-        // Cellular / "local only": never ask the network for a cover. Only a
+        // Offline mode: never ask the network for a cover. Only a
         // direct image link can be looked up on the phone without a request.
         if (!canUseNetwork()) {
           const stored = pic_id.startsWith("http")

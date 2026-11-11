@@ -26,7 +26,8 @@ import {
   Download,
   Search,
   X,
-  RefreshCw,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { DetailSkeleton } from "@/components/skeletons/DetailSkeleton";
@@ -65,7 +66,13 @@ import {
   type OfflineSyncProgress,
 } from "@/lib/offline-audio";
 import { readHomeList, writeHomeList } from "@/lib/home-list-cache";
-import { allowNetworkTemporarily, canUseNetwork } from "@/lib/network-policy";
+import {
+  canUseNetwork,
+  setManualLocalOnly,
+  useManualLocalOnly,
+} from "@/lib/network-policy";
+import { storeCovers } from "@/lib/cover-cache";
+import { forceHttps } from "@shared/utils/url";
 
 const LOAD_MORE_RETRY_DELAYS_MS = [1_500, 4_000];
 
@@ -100,7 +107,6 @@ interface UnifiedDetail {
 }
 
 const NETEASE_PLAYLIST_PAGE_SIZE = 100;
-const MANUAL_REFRESH_NETWORK_MS = 10 * 60_000;
 
 export function NeteaseDetail({
   id,
@@ -262,8 +268,11 @@ export function NeteaseDetail({
   // newly liked songs, then mirror every cached song onto the phone.
   const [offline, setOffline] = useState<OfflineSyncProgress | null>(null);
   const [offlineBytes, setOfflineBytes] = useState<number | null>(null);
-  // Bumped by the manual "update 红心" button to restart the sync at once.
+  const offlineMode = useManualLocalOnly();
+  // Bumped when the owner switches back to online, to sync at once.
   const [manualSync, setManualSync] = useState(0);
+  const tracksRef = useRef(tracks);
+  tracksRef.current = tracks;
   useEffect(() => {
     if (!compact || !id || type !== "playlist" || !authenticated) return;
     let cancelled = false;
@@ -283,11 +292,8 @@ export function NeteaseDetail({
         document.addEventListener("visibilitychange", waitingForVisible);
         return;
       }
-      // Cellular / "local only": no sync; look again later without using a round.
-      if (!canUseNetwork()) {
-        timers.push(window.setTimeout(() => void run(round), 90_000));
-        return;
-      }
+      // Offline mode: nothing to do. Switching back online restarts this.
+      if (!canUseNetwork()) return;
       requestNeteasePlaylistSync(id);
       const ids = await getOfflineTrackIds(id);
       if (cancelled || !ids) return;
@@ -296,6 +302,16 @@ export function NeteaseDetail({
       });
       const usage = await getOfflineUsage();
       if (!cancelled && usage) setOfflineBytes(usage.usedBytes);
+      // Then the covers of the listed songs, also only what is missing.
+      await storeCovers(
+        tracksRef.current
+          .map((track) => track.pic_id)
+          .filter((pic): pic is string => !!pic && pic.startsWith("http"))
+          .map((pic) => forceHttps(pic)),
+        () =>
+          !cancelled && canUseNetwork() && document.visibilityState !== "hidden"
+      );
+      if (cancelled) return;
       // New likes need a server round first; look again a few times.
       if (round < 3) {
         timers.push(window.setTimeout(() => void run(round + 1), 90_000));
@@ -309,7 +325,7 @@ export function NeteaseDetail({
       if (waitingForVisible)
         document.removeEventListener("visibilitychange", waitingForVisible);
     };
-  }, [compact, id, type, authenticated, manualSync]);
+  }, [compact, id, type, authenticated, manualSync, offlineMode]);
 
   const onHeaderBack = () => {
     handleBack(onBack);
@@ -684,19 +700,23 @@ export function NeteaseDetail({
           size="icon"
           className="h-11 w-9 text-foreground"
           onClick={() => {
-            if (!navigator.onLine) {
-              toast.error("当前没有网络");
-              return;
+            const goOffline = !offlineMode;
+            setManualLocalOnly(goOffline);
+            if (goOffline) {
+              toast("离线模式：只播手机里的歌，不联网", { id: "mode" });
+            } else {
+              toast("在线模式：联网并自动下载新歌和封面", { id: "mode" });
+              retry();
+              setManualSync((count) => count + 1);
             }
-            // Explicit request: allowed even on cellular / in local-only mode.
-            allowNetworkTemporarily(MANUAL_REFRESH_NETWORK_MS);
-            retry();
-            setManualSync((count) => count + 1);
-            toast("正在更新红心（临时联网 10 分钟）", { id: "manual-refresh" });
           }}
-          aria-label="更新红心"
+          aria-label={offlineMode ? "切换到在线模式" : "切换到离线模式"}
         >
-          <RefreshCw className="h-5 w-5" />
+          {offlineMode ? (
+            <WifiOff className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <Wifi className="h-5 w-5" />
+          )}
         </Button>
         {action}
       </>

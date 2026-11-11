@@ -98,7 +98,7 @@ export function HomeRoute() {
         hiddenAt = Date.now();
       } else if (hiddenAt && Date.now() - hiddenAt > HOME_REFRESH_AFTER_MS) {
         hiddenAt = 0;
-        // 蜂窝网络 / 仅本机模式下不联网刷新。
+        // 离线模式下不联网刷新。
         if (!canUseNetwork()) return;
         setRefreshKey((key) => key + 1);
       }

@@ -36,6 +36,41 @@ export async function getStoredCoverUrl(url: string): Promise<string | null> {
   }
 }
 
+/** NetEase's image CDN can resize; a phone-sized copy is plenty. */
+function downloadUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.endsWith(".music.126.net") && !parsed.search) {
+      return `${url}?param=500y500`;
+    }
+  } catch {
+    // Fall through to the original link.
+  }
+  return url;
+}
+
+/**
+ * Store every missing cover on the phone, one at a time. Covers already
+ * stored are skipped, so repeated calls only download what is new.
+ */
+export async function storeCovers(
+  urls: string[],
+  shouldContinue: () => boolean
+): Promise<void> {
+  if (typeof caches === "undefined") return;
+  try {
+    const cache = await caches.open(COVER_CACHE);
+    const stored = new Set((await cache.keys()).map((request) => request.url));
+    for (const url of new Set(urls)) {
+      if (!shouldContinue()) return;
+      if (!isCacheable(url) || stored.has(new URL(url).href)) continue;
+      await storeCover(url);
+    }
+  } catch {
+    // Covers are optional.
+  }
+}
+
 /** Store a cover on the phone (best effort, once per session per cover). */
 export async function storeCover(url: string): Promise<void> {
   if (!isCacheable(url) || storing.has(url)) return;
@@ -43,8 +78,7 @@ export async function storeCover(url: string): Promise<void> {
   try {
     const cache = await caches.open(COVER_CACHE);
     if (await cache.match(url)) return;
-    // The image is usually already in the HTTP cache from being displayed.
-    const response = await fetch(url, { mode: "cors", cache: "force-cache" });
+    const response = await fetch(downloadUrl(url), { mode: "cors" });
     if (response.status === 200) await cache.put(url, response);
   } catch {
     // CDN without CORS, quota full, etc.: covers are optional.

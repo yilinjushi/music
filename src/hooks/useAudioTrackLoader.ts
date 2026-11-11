@@ -472,7 +472,7 @@ export function useAudioTrackLoader(
           );
           assertActive();
           if (isLocalOnly() && navigator.onLine) {
-            toast("仅本机模式：这首歌没存到手机", { id: "local-only-skip" });
+            toast("离线模式：这首歌没存到手机", { id: "local-only-skip" });
           }
           if (nextIdx !== null && nextIdx !== state.currentIndex) {
             state.setCurrentIndexAndPlay(nextIdx);

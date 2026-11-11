@@ -200,11 +200,11 @@ export function DeferredSettingsContent() {
         <ApiUrlConfig />
         <SettingItem
           icon={Shield}
-          title="仅本机模式"
-          subtitle="不联网，只播手机里已存的歌（出门用流量时打开，省电不发热）"
+          title="离线模式"
+          subtitle="开：只播手机里已存的歌，不联网。关：联网，并自动下载新歌和封面"
           action={
             <Switch
-              aria-label="仅本机模式"
+              aria-label="离线模式"
               checked={localOnly}
               onCheckedChange={setManualLocalOnly}
             />

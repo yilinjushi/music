@@ -150,7 +150,7 @@ async function runSync(
   report(missing.length > 0);
 
   for (const path of missing) {
-    // Offline, cellular or "local only": no downloads.
+    // No connection or offline mode: no downloads.
     if (!canUseNetwork()) break;
     // Never download in the background: radio + disk writes heat the phone.
     if (document.visibilityState === "hidden") break;

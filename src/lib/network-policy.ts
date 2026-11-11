@@ -1,13 +1,11 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Decides whether playback and background work may use the network.
- *
- * On a cellular connection (weak signal, cell handovers) every request keeps
- * the radio powered and heats the phone, so the app then behaves as if it were
- * offline: it only plays songs already stored on the phone and starts no
- * background sync. Android reports the connection type; iOS does not expose
- * it, so the owner can also switch "local only" on by hand.
+ * The app has two modes, chosen by the owner:
+ * - online: uses the network, and keeps downloading newly liked songs and
+ *   their covers onto the phone;
+ * - offline: plays only what is already stored on the phone and never touches
+ *   the network (no radio activity, so the phone stays cool on the move).
  */
 const LOCAL_ONLY_KEY = "music_local_only";
 const listeners = new Set<() => void>();
@@ -48,28 +46,9 @@ export function useManualLocalOnly(): boolean {
   );
 }
 
-/** True when the browser reports a cellular connection (Android only). */
-export function isCellularConnection(): boolean {
-  const connection = (
-    navigator as Navigator & { connection?: { type?: string } }
-  ).connection;
-  return connection?.type === "cellular";
-}
-
-let networkAllowedUntil = 0;
-
-/**
- * The owner explicitly asked for a refresh (e.g. "update 红心" on cellular):
- * lift the restriction for a short while, then fall back automatically.
- */
-export function allowNetworkTemporarily(durationMs: number): void {
-  networkAllowedUntil = Date.now() + durationMs;
-}
-
-/** Only songs stored on the phone may play; no network work at all. */
+/** Offline mode: only songs stored on the phone may play; no network. */
 export function isLocalOnly(): boolean {
-  if (Date.now() < networkAllowedUntil) return false;
-  return manualLocalOnly || isCellularConnection();
+  return manualLocalOnly;
 }
 
 /** Whether playback and background work may touch the network right now. */
