@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Trash2, X, Maximize2, Dices } from "lucide-react";
+import { Trash2, X, Dices } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Drawer,
@@ -16,13 +15,8 @@ import { MusicCover } from "@/components/MusicCover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useMusicCover } from "@/hooks/useMusicCover";
 import { cn } from "@/lib/utils";
-import { useHistoryStore } from "@/store/history-store";
-import { useMusicStore } from "@/store/music-store";
 import type { MusicTrack } from "@/types/music";
-import {
-  getTrackIdentityKey,
-  isSameTrackIdentity,
-} from "@/lib/utils/track-identity";
+import { getTrackIdentityKey } from "@/lib/utils/track-identity";
 
 interface PlayerQueueDrawerProps {
   queue: MusicTrack[];
@@ -134,18 +128,14 @@ export function PlayerQueueDrawer({
   onClear,
   onReshuffle,
   onRemove,
-  onPlayTrack,
   onOpenChange,
   trigger,
 }: PlayerQueueDrawerProps) {
-  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
     onOpenChange?.(open);
   }, [open, onOpenChange]);
-  const [activeTab, setActiveTab] = useState<"queue" | "history">("queue");
-  const { history, removeFromHistory, clearHistory } = useHistoryStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const hasScrolledOnOpen = useRef(false);
@@ -172,11 +162,6 @@ export function PlayerQueueDrawer({
     if (el) scrollRef.current = el;
   };
 
-  const handleTabChange = (tab: "queue" | "history") => {
-    setActiveTab(tab);
-    viewportRef.current?.scrollTo({ top: 0, behavior: "instant" });
-  };
-
   return (
     <Drawer open={open} onOpenChange={setOpen}>
       <DrawerTrigger asChild>{trigger}</DrawerTrigger>
@@ -185,51 +170,21 @@ export function PlayerQueueDrawer({
         onClick={(e) => e.stopPropagation()}
       >
         <DrawerHeader className="shrink-0 px-6 pb-4 pt-6">
-          <DrawerTitle className="sr-only">
-            {activeTab === "queue" ? "播放列表" : "最近播放"}
-          </DrawerTitle>
+          <DrawerTitle className="sr-only">播放列表</DrawerTitle>
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <button
-                type="button"
-                onClick={() => handleTabChange("queue")}
-                className={cn(
-                  "min-h-11 text-[15px] transition-all whitespace-nowrap",
-                  activeTab === "queue"
-                    ? "font-bold text-foreground tracking-wide"
-                    : "font-medium text-muted-foreground hover:text-foreground"
-                )}
-                aria-pressed={activeTab === "queue"}
-              >
-                播放列表{" "}
-                <span className="text-xs opacity-60 ml-0.5">
-                  {queue.length}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleTabChange("history")}
-                className={cn(
-                  "min-h-11 text-[15px] transition-all whitespace-nowrap",
-                  activeTab === "history"
-                    ? "font-bold text-foreground tracking-wide"
-                    : "font-medium text-muted-foreground hover:text-foreground"
-                )}
-                aria-pressed={activeTab === "history"}
-              >
-                最近播放{" "}
-                <span className="text-xs opacity-60 ml-0.5">
-                  {history.length}
-                </span>
-              </button>
-            </div>
+            <p className="flex min-h-11 items-center text-[15px] font-bold text-foreground">
+              播放列表
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                {queue.length}
+              </span>
+            </p>
 
             <DrawerDescription className="sr-only">
               当前播放队列，可切换、清空或删除歌曲。
             </DrawerDescription>
 
             <div className="flex items-center gap-2">
-              {activeTab === "queue" && isShuffle && (
+              {isShuffle && (
                 <Button
                   variant="ghost"
                   size="icon"
@@ -243,30 +198,9 @@ export function PlayerQueueDrawer({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 text-muted-foreground/70 hover:bg-muted hover:text-foreground transition-colors"
-                onClick={() => {
-                  setOpen(false);
-                  useMusicStore.getState().setIsFullScreenPlayer(false);
-                  navigate(activeTab === "queue" ? "/queue" : "/history");
-                }}
-                title={activeTab === "queue" ? "展开播放列表" : "展开历史记录"}
-              >
-                <Maximize2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
                 className="h-9 w-9 text-muted-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
-                onClick={
-                  activeTab === "queue"
-                    ? onClear
-                    : () => {
-                        if (confirm("确定清空播放历史吗？")) {
-                          clearHistory();
-                        }
-                      }
-                }
-                title={activeTab === "queue" ? "清空播放列表" : "清空播放历史"}
+                onClick={onClear}
+                title="清空播放列表"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -277,41 +211,20 @@ export function PlayerQueueDrawer({
         <div className="min-h-0 flex-1">
           <ScrollArea className="h-full" viewportRef={viewportRef}>
             <div className="px-4 pb-[calc(2rem+var(--safe-area-bottom))] flex flex-col gap-1">
-              {activeTab === "queue"
-                ? queue.map((track, i) => (
-                    <QueueTrackItem
-                      key={`${getTrackIdentityKey(track)}-${i}`}
-                      track={track}
-                      isCurrent={i === currentIndex}
-                      isPlaying={isPlaying}
-                      onSelect={() => {
-                        onPlay(i);
-                        setOpen(false);
-                      }}
-                      onRemove={() => onRemove(track)}
-                      itemRef={i === currentIndex ? setCurrentRef : undefined}
-                    />
-                  ))
-                : history.map((track, i) => (
-                    <QueueTrackItem
-                      key={`${getTrackIdentityKey(track)}-${i}`}
-                      track={track}
-                      isCurrent={isSameTrackIdentity(
-                        track,
-                        queue[currentIndex]
-                      )}
-                      isPlaying={
-                        isPlaying &&
-                        isSameTrackIdentity(track, queue[currentIndex])
-                      }
-                      onSelect={() => {
-                        // 将历史歌曲加入队列并播放
-                        onPlayTrack?.(track);
-                        setOpen(false);
-                      }}
-                      onRemove={() => removeFromHistory(track)}
-                    />
-                  ))}
+              {queue.map((track, i) => (
+                <QueueTrackItem
+                  key={`${getTrackIdentityKey(track)}-${i}`}
+                  track={track}
+                  isCurrent={i === currentIndex}
+                  isPlaying={isPlaying}
+                  onSelect={() => {
+                    onPlay(i);
+                    setOpen(false);
+                  }}
+                  onRemove={() => onRemove(track)}
+                  itemRef={i === currentIndex ? setCurrentRef : undefined}
+                />
+              ))}
             </div>
           </ScrollArea>
         </div>

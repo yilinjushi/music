@@ -327,8 +327,7 @@ export function MusicTrackList({
           <>
             {headerLead ?? (
               <>
-                <div className="text-center">#</div>
-                <div>标题</div>
+                <div className="col-span-2" />
               </>
             )}
             <div

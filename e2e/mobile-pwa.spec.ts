@@ -605,7 +605,8 @@ test("search uses a deterministic same-origin NetEase fixture", async ({
     name: "播放：E2E 搜索结果",
     exact: true,
   });
-  await expect(resultTrack).toContainText("网易云(官方)");
+  // A single-source search shows no per-row source badge.
+  await expect(resultTrack).not.toContainText("网易云(官方)");
   await expect(resultTrack).toContainText("测试歌手 • 测试专辑");
 });
 
@@ -880,7 +881,7 @@ test("playing a playlist adds every fixture track to the queue", async ({
     page.getByRole("button", { name: "播放 测试曲目二", exact: true })
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "播放列表 2", exact: true })
+    page.getByRole("dialog", { name: "播放列表" }).getByText(/^播放列表\s*2$/)
   ).toBeVisible();
 });
 
@@ -960,9 +961,7 @@ test("primary source failure auto-matches the correct secondary recording and pl
 
   await page.getByRole("button", { name: "播放列表" }).click();
   const queueDialog = page.getByRole("dialog", { name: "播放列表" });
-  await expect(
-    queueDialog.getByRole("button", { name: /播放列表\s*1/ })
-  ).toBeVisible();
+  await expect(queueDialog.getByText(/^播放列表\s*1$/)).toBeVisible();
   await expect(
     queueDialog.getByRole("button", { name: "播放 爱错" })
   ).toHaveAttribute("aria-current", "true");
@@ -1247,9 +1246,7 @@ test("a waiting service-worker update never interrupts active playback", async (
   await expect(page.getByRole("button", { name: "播放列表" })).toBeVisible();
   await page.getByRole("button", { name: "播放列表" }).click();
   const queueDialog = page.getByRole("dialog", { name: "播放列表" });
-  await expect(
-    queueDialog.getByRole("button", { name: "播放列表 2", exact: true })
-  ).toBeVisible();
+  await expect(queueDialog.getByText(/^播放列表\s*2$/)).toBeVisible();
   await expect(
     queueDialog.getByRole("button", { name: "播放 测试曲目一", exact: true })
   ).toHaveAttribute("aria-current", "true");

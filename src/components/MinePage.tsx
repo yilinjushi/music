@@ -1,6 +1,6 @@
 "use client";
 
-import { ListVideo, Settings, History } from "lucide-react";
+import { ListVideo, Settings } from "lucide-react";
 import { MineSection } from "./PlaylistMarket/MineSection";
 import { useNavigate } from "react-router-dom";
 
@@ -8,14 +8,13 @@ export function MinePage() {
   const navigate = useNavigate();
 
   const quickNavs = [
-    { label: "历史", icon: History, path: "/history" },
     { label: "列表", icon: ListVideo, path: "/queue" },
     { label: "设置", icon: Settings, path: "/settings" },
   ];
 
   return (
     <div className="p-5 pb-bottom-stack">
-      <div className="mb-8 grid grid-cols-3 gap-3">
+      <div className="mb-8 grid grid-cols-2 gap-3">
         {quickNavs.map(({ label, icon: Icon, path }) => (
           <button
             type="button"

@@ -472,7 +472,7 @@ export function MusicSearchView({
                 hasMore={searchHasMore}
                 onLoadMore={() => fetchPage(searchPage + 1)}
                 emptyMessage={searchLoading ? "搜索中..." : "未找到相关结果"}
-                showSourceBadge={true}
+                showSourceBadge={source === "all"}
               />
             </Suspense>
           </div>
