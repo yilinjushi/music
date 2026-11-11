@@ -75,19 +75,18 @@ describe("SettingsPage loading boundary", () => {
       );
     });
 
-    expect(container.textContent).toContain("系统设置");
+    expect(container.textContent).toContain("设置");
     expect(container.textContent).toContain("首屏音源设置");
     expect(container.textContent).not.toContain("首屏音质设置");
-    expect(container.textContent).not.toContain("音量调节");
-    expect(container.textContent).not.toContain("界面设置");
-    expect(container.textContent).not.toContain("账号数据");
+    expect(container.textContent).not.toContain("离线模式");
+    expect(container.textContent).not.toContain("主题切换");
 
     await act(async () => {
       animationFrames.shift()?.(0);
     });
 
     expect(container.textContent).not.toContain("首屏音质设置");
-    expect(container.textContent).not.toContain("音量调节");
+    expect(container.textContent).not.toContain("离线模式");
 
     await act(async () => {
       animationFrames.shift()?.(16);
@@ -98,9 +97,10 @@ describe("SettingsPage loading boundary", () => {
     });
 
     expect(container.textContent).toContain("首屏音质设置");
-    expect(container.textContent).toContain("音量调节");
-    expect(container.textContent).toContain("界面设置");
-    expect(container.textContent).toContain("账号数据");
+    expect(container.textContent).toContain("离线模式");
+    expect(container.textContent).toContain("主题切换");
+    // Removed from the simplified page.
+    expect(container.textContent).not.toContain("音量调节");
     expect(container.textContent).not.toContain("数据同步");
   });
 });

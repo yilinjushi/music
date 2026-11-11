@@ -14,23 +14,6 @@ interface SettingsPageProps {
   onBack?: () => void;
 }
 
-function SettingsSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-6">
-      <h2 className="px-1 pb-1 text-sm font-semibold text-muted-foreground">
-        {title}
-      </h2>
-      <div>{children}</div>
-    </div>
-  );
-}
-
 export function SettingsPage({ onBack }: SettingsPageProps) {
   const [renderDeferredSettings, setRenderDeferredSettings] = useState(false);
 
@@ -54,14 +37,11 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
   }, []);
 
   return (
-    <PageLayout title="系统设置" onBack={onBack}>
+    <PageLayout title="设置" onBack={onBack}>
       <div className="flex-1 p-4 pb-bottom-stack overflow-y-auto">
-        <SettingsSection title="常用设置">
+        <div className="mb-4 rounded-2xl bg-card px-4 [&>*:last-child]:border-b-0">
           <AggregatedSourceSelect />
-          <p className="pt-3 text-xs leading-relaxed text-muted-foreground">
-            聚合搜索会同时查询已启用的音源。点击上方“聚合音源”可以选择要用的音源，并拖动调整先后顺序。
-          </p>
-        </SettingsSection>
+        </div>
 
         {renderDeferredSettings && (
           <Suspense fallback={null}>

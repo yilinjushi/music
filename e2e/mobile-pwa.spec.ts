@@ -551,7 +551,7 @@ async function expectNoSeriousA11yViolations(page: Page) {
 for (const corePage of [
   { path: "/search", readyText: "输入歌名、歌手或专辑，搜索网易云音乐" },
   { path: "/mine", readyText: "网易云" },
-  { path: "/settings", readyText: "系统设置" },
+  { path: "/settings", readyText: "设置" },
 ]) {
   test(`${corePage.path} passes mobile a11y, overflow, and touch-target checks`, async ({
     page,
@@ -1259,13 +1259,17 @@ test("a previously visited deep route reloads from the offline app shell", async
   onlyBaseline(testInfo);
   allowRequestFailures(page, /.*/);
   await openCorePage(page, "/settings");
-  await expect(page.getByText("系统设置", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "设置", exact: true })
+  ).toBeVisible();
   await ensureControlledServiceWorker(page);
 
   await context.setOffline(true);
   try {
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByText("系统设置", { exact: true })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "设置", exact: true })
+    ).toBeVisible();
   } finally {
     await context.setOffline(false);
   }
